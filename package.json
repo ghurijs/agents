@@ -1,0 +1,95 @@
+{
+  "name": "@ghuri/agents",
+  "version": "0.1.0-alpha.0",
+  "description": "Ghuri agents: AI agents with tools generated from models and viewsets, plus MCP",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ghuri contributors",
+  "homepage": "https://github.com/ghurijs/agents#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ghurijs/agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ghurijs/agents/issues"
+  },
+  "keywords": [
+    "ghuri",
+    "django",
+    "cloudflare",
+    "workers",
+    "hono",
+    "drizzle",
+    "d1",
+    "r2",
+    "framework"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src test",
+    "format": "biome format --write src test"
+  },
+  "peerDependencies": {
+    "@ghuri/core": "^0.1.0-alpha.0",
+    "@ghuri/orm": "^0.1.0-alpha.0",
+    "@ghuri/rest": "^0.1.0-alpha.0",
+    "ai": "^7.0.0",
+    "hono": "^4.13.0",
+    "workers-ai-provider": "^4.0.1",
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "tsup": "^8.5.1",
+    "vitest": "^5.1.0",
+    "@biomejs/biome": "^2.6.6",
+    "@types/node": "^24.0.0",
+    "@ghuri/core": "^0.1.0-alpha.0",
+    "@ghuri/orm": "^0.1.0-alpha.0",
+    "@ghuri/rest": "^0.1.0-alpha.0",
+    "ai": "^7.0.0",
+    "hono": "^4.13.0",
+    "workers-ai-provider": "^4.0.1",
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "peerDependenciesMeta": {
+    "workers-ai-provider": {
+      "optional": true
+    },
+    "@ai-sdk/anthropic": {
+      "optional": true
+    },
+    "@ai-sdk/openai": {
+      "optional": true
+    }
+  }
+}
