@@ -52,7 +52,7 @@ export async function setupHarness(opts: HarnessOptions = {}) {
     PASSWORD_HASHERS: FAST_HASHERS,
     ...opts.settings,
   }))
-  const app = createApp(settings, { checks: false } as any)
+  const app = createApp(settings, { checks: false })
   const ctx = await app.setup(env)
   // Create every table straight from the models: the auth app ships migrations, and unmigrated test apps
   // (shop, agents — whose migrations are generated later) reference its user model.
