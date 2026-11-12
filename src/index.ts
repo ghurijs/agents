@@ -16,6 +16,28 @@ export {
 export { AgentsConfig } from './apps'
 export { AgentError, ModelResolutionError, ToolError, ToolInputError, UnknownToolError } from './errors'
 export {
+  AgentChatView,
+  type AgentClass,
+  AgentRouter,
+  type AgentRouterOptions,
+  agentAuthenticationClasses,
+  ConversationDetailView,
+  ConversationListView,
+} from './http'
+export {
+  agentTool,
+  JSONRPC,
+  type JsonRpcId,
+  type JsonRpcResponse,
+  MCP_LATEST_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSIONS,
+  type McpCallContext,
+  McpError,
+  McpServer,
+  type McpServerOptions,
+  McpView,
+} from './mcp'
+export {
   ConversationNotFound,
   createConversation,
   getConversation,

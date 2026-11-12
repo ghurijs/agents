@@ -169,6 +169,8 @@ export class Agent {
   static agentName?: string
   /** Shown to MCP clients for the `ask_<name>` tool. */
   static description?: string
+  /** Tools implemented by methods of the same name, without decorators: `{ refund: tool({...}) }`. */
+  static tools?: Record<string, ToolDecorator>
 
   /** `'provider:model-id'` or an AI SDK `LanguageModel` (default `AGENTS.DEFAULT_MODEL`). */
   model?: string | LanguageModel

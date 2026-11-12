@@ -1,11 +1,13 @@
 import { apps, type RequestUser } from '@ghuri/core'
 import type { ModelMessage } from 'ai'
-import { AgentError } from './errors'
+import { ToolError } from './errors'
 import { Conversation, Message } from './models'
 
 /** The conversation does not exist, belongs to another agent, or is not owned by the user. */
-export class ConversationNotFound extends AgentError {
-  status = 404
+export class ConversationNotFound extends ToolError {
+  constructor(message: string) {
+    super(message, { status: 404 })
+  }
 }
 
 /** Is conversation memory available (the `agents` app installed)? */
