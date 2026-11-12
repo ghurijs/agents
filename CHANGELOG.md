@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.2
 
 - MCP protocol revision **2026-07-28** (stateless) next to the legacy revisions on the same endpoint: no `initialize`
   or session; every request's `_meta` (`io.modelcontextprotocol/protocolVersion`, `…/clientCapabilities`) and the
