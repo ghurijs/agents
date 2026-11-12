@@ -17,9 +17,17 @@ function userModel(): ModelClass {
   return apps.getModel(label) as ModelClass
 }
 
+function newConversationId(): string {
+  return crypto.randomUUID()
+}
+
+function emptyMetadata(): Record<string, unknown> {
+  return {}
+}
+
 /** A chat thread between a user and one agent (table `agents_conversation`). */
 export class Conversation extends Model({
-  id: new UUIDField({ primaryKey: true, default: () => crypto.randomUUID(), editable: false }),
+  id: new UUIDField({ primaryKey: true, default: newConversationId, editable: false }),
   user: new ForeignKey(userModel, {
     null: true,
     blank: true,
@@ -28,7 +36,7 @@ export class Conversation extends Model({
   }),
   agent: new CharField({ maxLength: 100, dbIndex: true }),
   title: new CharField({ maxLength: 200, blank: true, default: '' }),
-  metadata: new JSONField({ default: () => ({}), blank: true }),
+  metadata: new JSONField({ default: emptyMetadata, blank: true }),
   createdAt: new DateTimeField({ autoNowAdd: true }),
   updatedAt: new DateTimeField({ autoNow: true }),
 }) {

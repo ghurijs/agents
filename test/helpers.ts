@@ -12,12 +12,7 @@ import {
 } from '@ghuri/auth'
 import { createApp, defineSettings, type Env, type GhuriSettings, type UrlPatterns } from '@ghuri/core'
 import { createTestClient } from '@ghuri/core/testing'
-import {
-  createTablesForModels,
-  setTestSchemaCreator,
-  setupTestDatabase,
-  type TestBackend,
-} from '@ghuri/orm/testing'
+import { setupTestDatabase, type TestBackend } from '@ghuri/orm/testing'
 import { APIClient } from '@ghuri/rest/testing'
 import { afterAll, beforeAll, beforeEach } from 'vitest'
 import { AgentsConfig } from '../src/index'
@@ -54,11 +49,9 @@ export async function setupHarness(opts: HarnessOptions = {}) {
   }))
   const app = createApp(settings, { checks: false })
   const ctx = await app.setup(env)
-  // Create every table straight from the models: the auth app ships migrations, and unmigrated test apps
-  // (shop, agents — whose migrations are generated later) reference its user model.
-  setTestSchemaCreator(createTablesForModels)
+  // Like Django's test runner: run the shipped migrations (contenttypes, auth, sessions, authtoken, agents)
+  // and create the tables of the unmigrated test app (shop) straight from its models.
   const db = await setupTestDatabase({ using: opts.using ?? 'sqlite' })
-  setTestSchemaCreator(undefined)
   const client = createTestClient(app, { env })
   const api = new APIClient(client, { defaultFormat: 'json' })
   return { app, env, ctx, db, client, api }

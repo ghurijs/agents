@@ -306,6 +306,8 @@ export class Agent {
   protected async prepare(input: AgentInput, opts: RunOptions): Promise<Prepared> {
     const user = opts.user ?? anonymousUser
     if (opts.checkPermissions) await this.checkPermissions(user, opts.request)
+    // Resolve the model first: a missing provider / key / binding must not leave an empty conversation behind.
+    const model = await resolveModel(this.model)
     const agentName = this.getName()
     const useMemory = opts.memory ?? (this.memory !== false && memoryAvailable())
     let conversation: Conversation | undefined
@@ -338,7 +340,6 @@ export class Agent {
     }
     await this.beforeRun?.(ctx)
     const instructions = await this.getInstructions(ctx)
-    const model = await resolveModel(this.model)
     return { ctx, model, instructions, tools: this.buildToolSet(ctx), ghuri: tryGetContext() }
   }
 

@@ -1,5 +1,6 @@
-import { ImproperlyConfigured, path, type UrlPatterns } from '@ghuri/core'
+import { ImproperlyConfigured, path, tryGetContext, type UrlPatterns } from '@ghuri/core'
 import {
+  APIException,
   type APIRequest,
   APIResponse,
   APIView,
@@ -12,6 +13,7 @@ import {
   ValidationError as RestValidationError,
 } from '@ghuri/rest'
 import type { Agent, AgentInput } from './agent'
+import { ModelResolutionError } from './errors'
 import { McpServer, type McpServerOptions } from './mcp'
 import { ConversationNotFound, getConversation, memoryAvailable } from './memory'
 import { Conversation, Message } from './models'
@@ -19,6 +21,16 @@ import { consumeAgentQueue } from './queue'
 import { agentsSettings } from './settings'
 
 export type AgentClass = new () => Agent
+
+/**
+ * 503: the agent's model can't be used (missing provider package, API key or Workers AI binding). The reason
+ * is shown with `DEBUG`; production answers stay generic.
+ */
+export class ModelUnavailable extends APIException {
+  static override statusCode = 503
+  static override defaultDetail = "The agent's language model is not available."
+  static override defaultCode = 'model_unavailable'
+}
 
 /** `AGENTS.AUTHENTICATION_CLASSES`, else `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`. */
 export function agentAuthenticationClasses(): AuthenticationClass[] | undefined {
@@ -112,6 +124,8 @@ export class AgentChatView extends AgentBaseView {
       })
     } catch (err) {
       if (err instanceof ConversationNotFound) throw new NotFound(err.message)
+      if (err instanceof ModelResolutionError)
+        throw new ModelUnavailable(tryGetContext()?.settings.DEBUG ? err.message : undefined)
       throw err
     }
   }

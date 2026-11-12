@@ -36,6 +36,23 @@ function mark(fn: any, name: string, opts: ToolOptions): void {
 }
 
 /**
+ * Legacy (`experimentalDecorators`) method decorators compiled by Babel with decorator metadata — e.g. jiti, the
+ * TypeScript loader of the `ghuri` CLI — may receive the class prototype instead of the property descriptor
+ * (the no-op metadata decorators return their target). Recover the real descriptor in that case.
+ */
+function legacyMethodDescriptor(
+  target: unknown,
+  key: unknown,
+  descriptor: unknown,
+): PropertyDescriptor | undefined {
+  if (typeof key !== 'string' && typeof key !== 'symbol') return undefined
+  if (!target || (typeof target !== 'object' && typeof target !== 'function')) return undefined
+  if (descriptor !== undefined && descriptor !== target) return undefined
+  const real = Object.getOwnPropertyDescriptor(target, key)
+  return real && typeof real.value === 'function' ? real : undefined
+}
+
+/**
  * Declare a tool. Three forms:
  *
  * ```ts
@@ -67,6 +84,11 @@ export function tool<S extends z.ZodType | JSONSchema | undefined = undefined>(
         context && typeof context === 'object' && 'name' in context ? String(context.name) : value.name
       mark(value, name, opts as ToolOptions)
       return value
+    }
+    const legacy = legacyMethodDescriptor(value, context, descriptor)
+    if (legacy) {
+      mark(legacy.value, String(context), opts as ToolOptions)
+      return legacy
     }
     throw new TypeError('@tool() can only decorate methods.')
   }) as ToolDecorator<S>

@@ -29,14 +29,22 @@ class SupportAgent extends Agent {
   override tools = [orderTools()]
 }
 
+/** Configured for Workers AI, but the test env has no `AI` binding. */
+class UnconfiguredAgent extends Agent {
+  override model = 'workers-ai:@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+}
+
 const agents = new AgentRouter()
 agents.register('support', SupportAgent)
+const unconfigured = new AgentRouter()
+unconfigured.register('unconfigured', UnconfiguredAgent)
 
 const now = tool({ name: 'now', description: 'Server time', execute: () => '12:00' })
 
 function urls() {
   return [
     path('agents/', include(agents.urls)),
+    path('unconfigured/', include(unconfigured.urls)),
     path(
       'mcp/',
       agents.mcp({
@@ -117,6 +125,15 @@ for (const using of backends) {
         conversationId: '00000000-0000-4000-8000-000000000000',
       })
       expect(missing.status).toBe(404)
+    })
+
+    it('answers 503 when the model is not available (missing binding / key)', async () => {
+      const { alice } = await seed()
+      h.api.forceAuthenticate(alice)
+      const res = await h.api.post('/unconfigured/unconfigured/chat', { message: 'hi' })
+      expect(res.status).toBe(503)
+      expect(res.data).toEqual({ detail: "The agent's language model is not available." })
+      expect(await Conversation.objects.count()).toBe(0)
     })
 
     it('streams SSE in the AI SDK UI message stream format and saves the conversation', async () => {

@@ -120,7 +120,8 @@ export const urlpatterns = [
 ]
 ```
 
-Generate the tables for conversation memory once: `ghuri makemigrations agents && ghuri migrate`.
+The agents app ships its migration (`Conversation`, `Message`; the user foreign key follows
+`AUTH_USER_MODEL`): create the tables with `ghuri migrate`.
 
 ```bash
 curl -X POST https://shop.example.com/agents/support/chat \
@@ -129,8 +130,9 @@ curl -X POST https://shop.example.com/agents/support/chat \
 # {"conversationId":"7c0e…","text":"Your order A-1042 shipped yesterday.","toolCalls":[…],"usage":{…}}
 ```
 
-> Decorators are standard TC39 decorators (TypeScript 5, esbuild, wrangler). Prefer no decorators? See
-> [Custom tools](#5-custom-tools).
+> `@tool` works as a standard TC39 decorator (TypeScript 5, esbuild, wrangler) and as a legacy one (Vitest's
+> oxc with `oxc: { decorator: { legacy: true } }`, as `ghuri startproject` configures; jiti / the `ghuri` CLI).
+> Prefer no decorators? See [Custom tools](#5-custom-tools).
 
 ## 3. Models and providers
 
@@ -290,6 +292,9 @@ The conversation's `agent` column is the agent name: the `AgentRouter.register()
 | `GET <name>/conversations/` | the user's conversations `{ count, results }` (`?limit=&offset=`). |
 | `GET <name>/conversations/<id>/` | one conversation with its messages (owner only). |
 | `DELETE <name>/conversations/<id>/` | delete it (owner only). |
+
+When the model can't be used (provider package missing, no API key, no Workers AI binding) the chat answers
+**503** `{ "detail": "The agent's language model is not available." }` — with the reason when `DEBUG` is on.
 
 Authentication uses `AGENTS.AUTHENTICATION_CLASSES` (default: `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`);
 access uses the agent's `permissionClasses` (default `AGENTS.PERMISSION_CLASSES`, i.e. `[IsAuthenticated]`). With

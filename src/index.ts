@@ -23,6 +23,7 @@ export {
   agentAuthenticationClasses,
   ConversationDetailView,
   ConversationListView,
+  ModelUnavailable,
 } from './http'
 export {
   agentTool,
