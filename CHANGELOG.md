@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.0-alpha.2
+
+- MCP protocol revision **2026-07-28** (stateless) next to the legacy revisions on the same endpoint: no `initialize`
+  or session; every request's `_meta` (`io.modelcontextprotocol/protocolVersion`, `…/clientCapabilities`) and the
+  `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers are validated (`-32602`, `-32020`, `-32022` with
+  `data.supported` / `data.requested`, HTTP 400; `=?base64?…?=` header values decoded); `server/discover`; results carry
+  `resultType: 'complete'` and `io.modelcontextprotocol/serverInfo`; lists carry `ttlMs` / `cacheScope`
+  (`listTtlMs` option); unknown and removed methods (`ping`, `logging/setLevel`) answer 404 / `-32601`; batches are
+  refused. New exports `MCP_MODERN_PROTOCOL_VERSIONS`, `MCP_LEGACY_PROTOCOL_VERSIONS`, `MCP_META`,
+  `isModernProtocolVersion`, `JSONRPC.HEADER_MISMATCH` / `MISSING_REQUIRED_CLIENT_CAPABILITY` /
+  `UNSUPPORTED_PROTOCOL_VERSION`.
+- Behaviour change: `initialize` asking for an unknown or newer version now negotiates `2025-11-25`, the newest
+  revision that has `initialize` (`MCP_LATEST_PROTOCOL_VERSION` is now `2026-07-28`).
+- **MCP authorization (OAuth mode):** `McpServer({ oauth: { verifyAccessToken, … } })` accepts Bearer access tokens
+  whose audience is the canonical MCP URL (RFC 8707), serves RFC 9728 Protected Resource Metadata
+  (`server.wellKnownUrls`, `mcpWellKnownUrls(...servers)`) at `/.well-known/oauth-protected-resource[/<path>]`, answers
+  `401` with `WWW-Authenticate: Bearer resource_metadata="…", scope="…"` (`error="invalid_token"` for bad tokens) and
+  `403 error="insufficient_scope"` for step-up. Works with `verifyAccessToken` from the new `@ghuri/oauth-provider`, or
+  any verifier.
+- Per-tool OAuth scopes: `tool({ scopes })`, `scopes` on `ModelTools` / `ViewSetTools` (a list or per action, `'*'`
+  fallback), `requireScopes(scopes, toolOrToolkit)`, `AgentTool.scopes`; `requiredScopes`, `impliedScopes`,
+  `hideUnauthorizedTools`. Helpers `missingScopes`, `expandScopes`, `bearerChallenge`, `canonicalResourceUrl`,
+  `protectedResourceMetadataUrl`, `InsufficientScope`.
+
 ## 0.1.0-alpha.1
 
 - Ship the initial migration (`Conversation`, `Message`; the user foreign key follows `AUTH_USER_MODEL`): `ghuri migrate` creates the tables, no `makemigrations agents` needed. Tests run the real migrations.

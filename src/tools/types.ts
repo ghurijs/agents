@@ -39,6 +39,11 @@ export interface AgentTool {
   /** JSON Schema of the result, when known. */
   outputSchema?: JSONSchema
   annotations?: ToolAnnotations
+  /**
+   * OAuth scopes the access token must grant to see and call this tool over MCP (all of them). Ignored when the MCP
+   * server is not in OAuth mode and by agents.
+   */
+  scopes?: string[]
   /** Validate / coerce raw arguments; throws `ToolInputError`. Defaults to accepting any object. */
   parse?(input: unknown): unknown
   /** Run the tool. Throw `ToolError` for failures the model should see. */

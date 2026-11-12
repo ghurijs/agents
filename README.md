@@ -339,13 +339,38 @@ path('mcp/', agents.mcp({
 // without an AgentRouter: new McpServer({ tools, agents: { support: SupportAgent } }).urls (classes or factories)
 ```
 
-Supported: `initialize` (protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`; the client's
-version is echoed when supported), `notifications/*` (202), `ping`, `tools/list` (JSON Schema `inputSchema`,
-annotations), `tools/call` (text + `structuredContent`; tool failures are results with `isError: true`),
-empty `resources/list`, `resources/templates/list`, `prompts/list`, batches, and JSON-RPC errors
-(`-32700`, `-32600`, `-32601`, `-32602`, `-32603`). Requests without valid credentials get HTTP 401 with
-`WWW-Authenticate`; browser `Origin`s other than your host / `CSRF_TRUSTED_ORIGINS` are refused (DNS rebinding);
-unknown `MCP-Protocol-Version` headers get 400.
+Protocol revisions: **`2026-07-28`** (stateless: no `initialize` or session; `_meta` version + capabilities and the
+`MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers are validated; `server/discover`; `resultType`,
+`serverInfo` and `ttlMs` / `cacheScope` on results; errors `-32020` / `-32021` / `-32022`; unknown methods 404) and the
+legacy `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` (`initialize`, `ping`, batches), on the same endpoint.
+Methods: `tools/list` (JSON Schema `inputSchema`, annotations), `tools/call` (text + `structuredContent`; tool
+failures are results with `isError: true`), empty `resources/list`, `resources/templates/list`, `prompts/list`,
+notifications (202). Requests without valid credentials get HTTP 401 with `WWW-Authenticate`; browser `Origin`s other
+than your host / `CSRF_TRUSTED_ORIGINS` are refused (DNS rebinding).
+
+**OAuth mode** (MCP authorization) for Claude.ai, ChatGPT, Claude Code and Codex: pair with
+[`@ghuri/oauth-provider`](https://github.com/ghurijs/oauth-provider) as the authorization server.
+
+```ts
+import { oauth2ProviderUrls, oauth2WellKnownUrls, verifyAccessToken } from '@ghuri/oauth-provider'
+
+const mcp = new McpServer({
+  tools: [tool({ name: 'theme_update', description: '…', scopes: ['theme:write'], execute })],
+  oauth: { verifyAccessToken },                  // tokens must have aud = this MCP URL (RFC 8707)
+})
+urlpatterns = [
+  path('oauth/', include(oauth2ProviderUrls)),
+  path('mcp/', mcp.urls),
+  path('', include(oauth2WellKnownUrls)),        // /.well-known/oauth-authorization-server
+  path('', include(mcp.wellKnownUrls)),          // /.well-known/oauth-protected-resource/mcp (RFC 9728)
+]
+```
+
+Anonymous requests get `401 WWW-Authenticate: Bearer resource_metadata="…", scope="…"`; tools the token lacks scopes
+for are hidden from `tools/list` and answer `403 Bearer error="insufficient_scope"` (step-up). Options:
+`requiredScopes`, `impliedScopes`, `scopesSupported`, `resource`, `authorizationServers`, `hideUnauthorizedTools`;
+`requireScopes(scopes, toolOrToolkit)` and the toolkit option `scopes` set per-tool scopes. See the docs topic
+"MCP server with OAuth".
 
 Create a token for the user the client acts as (`ghuri drf_create_token alice`, or `Token.objects.create({ user })`).
 
