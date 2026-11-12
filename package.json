@@ -1,6 +1,6 @@
 {
   "name": "@ghuri/agents",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Ghuri agents: AI agents with tools generated from models and viewsets, plus MCP",
   "type": "module",
   "license": "MIT",

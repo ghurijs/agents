@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.1
 
 - Ship the initial migration (`Conversation`, `Message`; the user foreign key follows `AUTH_USER_MODEL`): `ghuri migrate` creates the tables, no `makemigrations agents` needed. Tests run the real migrations.
 - `@tool` also works as a legacy decorator compiled by Babel with decorator metadata (jiti — the `ghuri` CLI's loader), which passes the prototype instead of the descriptor.
 - Chat answers 503 `ModelUnavailable` (reason shown with `DEBUG`) when the model can't be resolved, instead of a 500; the model is resolved before a conversation is created, so failed runs leave no empty conversation.
+- `McpServer({ agents })` accepts `Agent` subclasses as well as factories (`{ support: SupportAgent }` or `{ support: () => new SupportAgent() }`); previously a class was called without `new` and threw. New `AgentSource` type.
 
 ## 0.1.0-alpha.0
 
