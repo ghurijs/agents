@@ -9,7 +9,7 @@ import {
   SearchFilter,
 } from '@ghuri/rest'
 import { sanitizeToolName } from './schema'
-import { type ActionToolSpec, ViewSetTools } from './viewset'
+import { type ActionToolSpec, type ToolScopes, ViewSetTools } from './viewset'
 
 export type ModelToolAction = 'list' | 'retrieve' | 'create' | 'update' | 'delete'
 
@@ -52,6 +52,8 @@ export interface ModelToolsOptions {
   prefix?: string
   /** Override tool descriptions per action. */
   descriptions?: Partial<Record<ModelToolAction, string>>
+  /** OAuth scopes for MCP: for every tool, or per action (`{ list: ['posts:read'], create: ['posts:write'] }`). */
+  scopes?: ToolScopes
 }
 
 function defaultSerializer(model: any): any {
@@ -134,6 +136,10 @@ export class ModelTools extends ViewSetTools {
     super(buildViewSet(model, opts), { prefix, basename: model._meta.modelName })
     this.modelClass = model
     this.modelOptions = opts
+  }
+
+  protected override scopeOption(): ToolScopes | undefined {
+    return this.modelOptions.scopes
   }
 
   override actionSpecs(): ActionToolSpec[] {

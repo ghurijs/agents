@@ -28,16 +28,21 @@ export {
 export {
   type AgentSource,
   agentTool,
+  isModernProtocolVersion,
   JSONRPC,
   type JsonRpcId,
   type JsonRpcResponse,
   MCP_LATEST_PROTOCOL_VERSION,
+  MCP_LEGACY_PROTOCOL_VERSIONS,
+  MCP_META,
+  MCP_MODERN_PROTOCOL_VERSIONS,
   MCP_PROTOCOL_VERSIONS,
   type McpCallContext,
   McpError,
   McpServer,
   type McpServerOptions,
   McpView,
+  mcpWellKnownUrls,
 } from './mcp'
 export {
   ConversationNotFound,
@@ -48,6 +53,20 @@ export {
   saveMessages,
 } from './memory'
 export { Conversation, MESSAGE_ROLES, Message, type MessageRole } from './models'
+export {
+  bearerChallenge,
+  canonicalResourceUrl,
+  expandScopes,
+  InsufficientScope,
+  type McpOAuthOptions,
+  type McpTokenInfo,
+  type McpTokenVerifier,
+  mcpResource,
+  missingScopes,
+  protectedResourceMetadata,
+  protectedResourceMetadataUrl,
+  requireScopes,
+} from './oauth'
 export {
   getProviders,
   isLanguageModel,
@@ -90,4 +109,10 @@ export {
   type ToolContext,
   Toolkit,
 } from './tools/types'
-export { type ActionToolSpec, ViewSetTools, type ViewSetToolsOptions } from './tools/viewset'
+export {
+  type ActionToolSpec,
+  scopesFor,
+  type ToolScopes,
+  ViewSetTools,
+  type ViewSetToolsOptions,
+} from './tools/viewset'

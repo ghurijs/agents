@@ -23,6 +23,22 @@ export interface ViewSetToolsOptions {
   basename?: string
   /** Override tool descriptions per action. */
   descriptions?: Record<string, string>
+  /**
+   * OAuth scopes for MCP: for every tool (`['posts:read']`), or per action (`{ list: ['posts:read'], create:
+   * ['posts:write'], '*': ['posts'] }`; `'*'` applies to actions without an entry).
+   */
+  scopes?: ToolScopes
+}
+
+/** Scopes for every tool, or per action name with `'*'` as the fallback. */
+export type ToolScopes = string[] | Record<string, string[]>
+
+/** The scopes of one action from a `ToolScopes` option. */
+export function scopesFor(scopes: ToolScopes | undefined, ...names: string[]): string[] | undefined {
+  if (!scopes) return undefined
+  if (Array.isArray(scopes)) return scopes
+  for (const n of names) if (scopes[n]) return scopes[n]
+  return scopes['*']
 }
 
 export interface ActionToolSpec {
@@ -95,7 +111,16 @@ export class ViewSetTools extends Toolkit {
   }
 
   getTools(): AgentTool[] {
-    return this.actionSpecs().map((spec) => this.buildTool(spec))
+    return this.actionSpecs().map((spec) => {
+      const t = this.buildTool(spec)
+      const scopes = scopesFor(this.scopeOption(), spec.suffix, spec.action)
+      return scopes?.length ? { ...t, scopes: [...scopes] } : t
+    })
+  }
+
+  /** The `scopes` option. */
+  protected scopeOption(): ToolScopes | undefined {
+    return this.opts.scopes
   }
 
   get model(): any {

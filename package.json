@@ -66,6 +66,8 @@
     "@electric-sql/pglite": "^0.5.16",
     "@ghuri/auth": "^0.1.0-alpha.0",
     "@ghuri/core": "^0.1.0-alpha.0",
+    "@ghuri/oauth": "^0.1.0-alpha.0",
+    "@ghuri/oauth-provider": "^0.1.0-alpha.0",
     "@ghuri/orm": "^0.1.0-alpha.0",
     "@ghuri/rest": "^0.1.0-alpha.0",
     "@types/node": "^24.0.0",
