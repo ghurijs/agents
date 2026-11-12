@@ -1,7 +1,7 @@
 import { SessionAuthentication, TokenAuthentication } from '@ghuri/auth/rest'
 import { include, path } from '@ghuri/core'
 import { describe, expect, it } from 'vitest'
-import { Agent, AgentRouter, Conversation, Message, ModelTools, tool } from '../src/index'
+import { Agent, AgentRouter, Conversation, McpServer, Message, ModelTools, tool } from '../src/index'
 import { backends, makeUser, tokenFor, useHarness } from './helpers'
 import { type ScriptStep, scriptedModel } from './mock'
 import { Order } from './models'
@@ -345,6 +345,25 @@ for (const using of backends) {
       expect(res.body.result.isError).toBe(false)
       expect(res.body.result.structuredContent.text).toBe('You have A-1.')
       expect(res.body.result.structuredContent.conversationId).toMatch(/^[0-9a-f-]{36}$/)
+    })
+
+    it('McpServer accepts agent classes and factories', async () => {
+      const made: Agent[] = []
+      const server = new McpServer({
+        agents: {
+          byClass: SupportAgent,
+          byFactory: () => {
+            const a = new SupportAgent()
+            made.push(a)
+            return a
+          },
+        },
+      })
+      const tools = server.getTools()
+      expect(tools.map((t) => t.name)).toEqual(['ask_byClass', 'ask_byFactory'])
+      for (const t of tools) expect(t.description).toBe('Answers questions about your orders.')
+      expect(made).toHaveLength(1)
+      expect(made[0]).toBeInstanceOf(SupportAgent)
     })
 
     it('answers JSON-RPC errors for bad requests', async () => {

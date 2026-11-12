@@ -9,7 +9,7 @@ import {
   JSONRenderer,
   type PermissionClass,
 } from '@ghuri/rest'
-import type { Agent, ToolsInput } from './agent'
+import { Agent, type ToolsInput } from './agent'
 import { ToolError } from './errors'
 import { agentsSettings, defaultPermissionClasses } from './settings'
 import { runTool } from './tools/execute'
@@ -41,6 +41,18 @@ export interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown }
 }
 
+/** An `Agent` subclass, or a factory returning a fresh agent. */
+export type AgentSource = (new () => Agent) | (() => Agent)
+
+function isAgentClass(source: AgentSource): source is new () => Agent {
+  return source === Agent || source.prototype instanceof Agent
+}
+
+/** A factory for `source`: classes are instantiated with `new`, factories are called. */
+function agentFactory(source: AgentSource): () => Agent {
+  return isAgentClass(source) ? () => new source() : (source as () => Agent)
+}
+
 export interface McpServerOptions {
   /** Server name shown to clients (default `'ghuri'`). */
   name?: string
@@ -51,8 +63,8 @@ export interface McpServerOptions {
   instructions?: string
   /** Tools to expose: toolkits (`ModelTools`, `ViewSetTools`, `RouterTools`), `tool({...execute})`, `AgentTool`s. */
   tools?: ToolsInput
-  /** Agents to expose as `ask_<name>` tools: `{ support: SupportAgent }` or a factory map. */
-  agents?: Record<string, () => Agent>
+  /** Agents to expose as `ask_<name>` tools: agent classes (`{ support: SupportAgent }`) or factories (`() => new SupportAgent()`). */
+  agents?: Record<string, AgentSource>
   /** Authentication (default `AGENTS.AUTHENTICATION_CLASSES`, then REST defaults). */
   authenticationClasses?: AuthenticationClass[]
   /** Access to the endpoint (default `AGENTS.PERMISSION_CLASSES`: `[IsAuthenticated]`). */
@@ -275,7 +287,8 @@ function isValidId(id: unknown): boolean {
 }
 
 /** An agent exposed as an MCP tool (`ask_<name>`). */
-export function agentTool(name: string, factory: () => Agent): AgentTool {
+export function agentTool(name: string, source: AgentSource): AgentTool {
+  const factory = agentFactory(source)
   const probe = factory()
   return {
     name: sanitizeToolName(`ask_${name}`),

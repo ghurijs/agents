@@ -336,7 +336,7 @@ path('mcp/', agents.mcp({
   agents: true,                         // registered agents as ask_<name> tools (or a list of names, or false)
   // authenticationClasses / permissionClasses: default AGENTS.AUTHENTICATION_CLASSES / AGENTS.PERMISSION_CLASSES
 }))
-// without an AgentRouter: new McpServer({ tools, agents: { support: () => new SupportAgent() } }).urls
+// without an AgentRouter: new McpServer({ tools, agents: { support: SupportAgent } }).urls (classes or factories)
 ```
 
 Supported: `initialize` (protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`; the client's

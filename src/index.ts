@@ -26,6 +26,7 @@ export {
   ModelUnavailable,
 } from './http'
 export {
+  type AgentSource,
   agentTool,
   JSONRPC,
   type JsonRpcId,
