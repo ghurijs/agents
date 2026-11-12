@@ -41,7 +41,8 @@ function viewsetPrefix(viewset: any): string {
   } catch {
     model = undefined
   }
-  if (model?._meta) return sanitizeToolName(String(model._meta.verboseNamePlural).replace(/\s+/g, '_'))
+  if (model?._meta)
+    return sanitizeToolName(String(model._meta.verboseNamePlural).replace(/\s+/g, '_').toLowerCase())
   return sanitizeToolName(snakeCase(String(viewset.name).replace(/ViewSet$|View$/, '')))
 }
 

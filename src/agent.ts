@@ -33,6 +33,7 @@ import {
 } from './memory'
 import type { Conversation } from './models'
 import { resolveModel } from './providers'
+import { type EnqueueOptions, enqueueRun } from './queue'
 import { agentsSettings, DEFAULT_MAX_STEPS, defaultPermissionClasses } from './settings'
 import { inContext, toToolError } from './tools/execute'
 import { collectDeclaredTools, isToolDecorator, standaloneTool, type ToolDecorator } from './tools/tool'
@@ -396,6 +397,14 @@ export class Agent {
       finishReason: res.finishReason,
       steps: res.steps.length,
     })
+  }
+
+  /**
+   * Run in the background through a Cloudflare Queue (`AGENTS.QUEUE_BINDING`); a consumer registered with
+   * `AgentRouter.consumeQueue()` performs the run. Returns the conversation id to poll.
+   */
+  async enqueue(input: AgentInput, opts: EnqueueOptions = {}): Promise<{ conversationId?: string }> {
+    return enqueueRun(this, input, opts)
   }
 
   /**

@@ -2,4 +2,22 @@
 
 ## 0.1.0-alpha.0
 
-- Initial alpha.
+- `Agent` base class on the AI SDK v7 tool loop: `model` (`'workers-ai:…'`, `'anthropic:…'`, `'openai:…'` or a
+  `LanguageModel`), `instructions` (string or function of the run), `tools`, `permissionClasses`, `maxSteps`,
+  `temperature`, `maxOutputTokens`, `providerOptions`, hooks `beforeRun` / `onToolCall` / `afterRun`;
+  `run()`, `stream()` (`AgentStream` with `toUIMessageStreamResponse()`), `enqueue()`.
+- Lazy provider registry (`resolveModel`, `registerProvider`): provider packages are imported only when used and
+  bundlers tolerate missing ones.
+- Tools: `@tool` decorator (TC39), `static tools = { name: tool({...}) }`, standalone `tool({ ..., execute })`;
+  `ModelTools`, `ViewSetTools`, `RouterTools` generating tools with JSON Schemas from serializers, filter backends
+  and paginators, executed through `router.registry[i].invoke()` as the requesting user. Tool failures become
+  tool errors for the model (`ToolError`).
+- Conversation memory: `AgentsConfig` app with `Conversation` and `Message` models; automatic load / save,
+  owner-only access.
+- `AgentRouter`: `POST <name>/chat` (JSON, or SSE in the AI SDK UI message stream format),
+  `GET <name>/conversations/`, `GET|DELETE <name>/conversations/<id>/`; queue consumer `consumeQueue()`.
+- MCP: in-house Streamable HTTP server (`agents.mcp()`, `McpServer`) — `initialize`, `ping`, `tools/list`,
+  `tools/call`, empty resources / prompts lists, notifications, batches, JSON-RPC errors; REST authentication
+  classes; agents exposed as `ask_<name>` tools.
+- Settings `AGENTS`: `DEFAULT_MODEL`, `AI_BINDING`, `PROVIDERS`, `MAX_STEPS`, `AUTHENTICATION_CLASSES`,
+  `PERMISSION_CLASSES`, `QUEUE_BINDING`.

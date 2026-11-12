@@ -55,6 +55,14 @@ export {
   resolveModel,
   unregisterProvider,
 } from './providers'
+export {
+  AGENT_JOB_TYPE,
+  type AgentJob,
+  consumeAgentQueue,
+  type EnqueueOptions,
+  enqueueRun,
+  loadJobUser,
+} from './queue'
 export { type AgentsSettings, agentsSettings, type ProviderConfig } from './settings'
 export { runTool, toToolError } from './tools/execute'
 export { type ModelToolAction, ModelTools, type ModelToolsOptions } from './tools/model'

@@ -25,6 +25,8 @@ export interface AgentsSettings {
   AUTHENTICATION_CLASSES?: AuthenticationClass[]
   /** Permission classes for agents that don't set `permissionClasses` (default `[IsAuthenticated]`). */
   PERMISSION_CLASSES?: PermissionClass[]
+  /** Queue producer binding used by `agent.enqueue()` (default `'AGENTS_QUEUE'`). */
+  QUEUE_BINDING?: string
 }
 
 declare module '@ghuri/core' {

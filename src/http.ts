@@ -15,6 +15,7 @@ import type { Agent, AgentInput } from './agent'
 import { McpServer, type McpServerOptions } from './mcp'
 import { ConversationNotFound, getConversation, memoryAvailable } from './memory'
 import { Conversation, Message } from './models'
+import { consumeAgentQueue } from './queue'
 import { agentsSettings } from './settings'
 
 export type AgentClass = new () => Agent
@@ -205,6 +206,14 @@ export class AgentRouter {
     this.registry.set(name, agentClass)
     this._urls = undefined
     return this
+  }
+
+  /**
+   * Consume queued runs (`agent.enqueue()`) from the Cloudflare Queue named `queue` (default: every queue).
+   * Call it once, e.g. from an AppConfig's `ready()`. Returns an unregister function.
+   */
+  consumeQueue(queue = '*'): () => void {
+    return consumeAgentQueue(queue, (name) => this.create(name))
   }
 
   /** A fresh agent instance for `name`. */
