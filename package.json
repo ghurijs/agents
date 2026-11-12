@@ -50,29 +50,34 @@
     "format": "biome format --write src test"
   },
   "peerDependencies": {
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0",
     "@ghuri/core": "^0.1.0-alpha.0",
     "@ghuri/orm": "^0.1.0-alpha.0",
     "@ghuri/rest": "^0.1.0-alpha.0",
     "ai": "^7.0.0",
     "hono": "^4.13.0",
-    "workers-ai-provider": "^4.0.1",
-    "@ai-sdk/anthropic": "^4.0.0",
-    "@ai-sdk/openai": "^4.0.0"
+    "workers-ai-provider": "^4.0.1"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "tsup": "^8.5.1",
-    "vitest": "^5.1.0",
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@ai-sdk/openai": "^4.0.0",
     "@biomejs/biome": "^2.6.6",
-    "@types/node": "^24.0.0",
+    "@electric-sql/pglite": "^0.5.16",
+    "@ghuri/auth": "^0.1.0-alpha.0",
     "@ghuri/core": "^0.1.0-alpha.0",
     "@ghuri/orm": "^0.1.0-alpha.0",
     "@ghuri/rest": "^0.1.0-alpha.0",
+    "@types/node": "^24.0.0",
     "ai": "^7.0.0",
+    "better-sqlite3": "^13.1.1",
+    "drizzle-orm": "^0.45.4",
+    "esbuild": "^0.27.7",
     "hono": "^4.13.0",
-    "workers-ai-provider": "^4.0.1",
-    "@ai-sdk/anthropic": "^4.0.0",
-    "@ai-sdk/openai": "^4.0.0"
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0",
+    "workers-ai-provider": "^4.0.1"
   },
   "publishConfig": {
     "access": "public",
