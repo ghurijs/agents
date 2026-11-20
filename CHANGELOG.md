@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.3
 
 - Queued runs keep their request context: `enqueue()` stores `captureContext()` from `@ghuri/core` in the job
   (`carried`, left out when empty) and the consumer runs inside `restoreContext()`. With `@ghuri/tenants`, a queued
