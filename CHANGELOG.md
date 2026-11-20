@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.4
 
 - `@ghuri/agents/evals`: measure how well an agent does real tasks with a given model, and compare models on
   pass rate, tokens and cost. `defineEval({ name, agent, cases, models, setup, judgeModel, prices, repeat })`,
