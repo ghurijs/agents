@@ -447,6 +447,29 @@ enqueued it.
 `Run` (table `agents_run`, migration `0002_run`): model, conversation, user, status, steps, tokens, tool calls,
 carried context, error and duration. `{ messages: true }` also stores the messages (prompts and answers).
 
+### Evals
+
+`@ghuri/agents/evals` runs real tasks against one or more models and grades each run, to compare a cheap model
+with an expensive one on your own tools:
+
+```ts
+import { calledTool, defineEval, formatEvalReport, judge, runEval } from '@ghuri/agents/evals'
+
+const suite = defineEval({
+  name: 'support',
+  agent: SupportAgent,
+  models: ['anthropic:claude-haiku-5-5', 'anthropic:claude-opus-5-5'],
+  judgeModel: 'anthropic:claude-opus-5-5',
+  prices: { 'anthropic:claude-haiku-5-5': { input: 0.1, output: 0.5 } },   // $ per million tokens
+  setup: async () => ({ user: await makeUser() }),
+  cases: [{ name: 'tracks an order', input: 'Where is order A-1?',
+            checks: [calledTool('orders_retrieve'), judge('Gives the shipping status of A-1.')] }],
+})
+console.log(formatEvalReport(await runEval(suite, { beforeEach: () => db.flush() })))
+```
+
+Put suites in `*.eval.ts` files and run them with `npx ghuri eval [--models a,b] [--repeat n] [--report dir]`.
+
 ## 11. Security model
 
 - **Tools act as the user, never as the server.** Generated tools force-authenticate the run's user and go

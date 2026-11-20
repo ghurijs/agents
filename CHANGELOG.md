@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `@ghuri/agents/evals`: measure how well an agent does real tasks with a given model, and compare models on
+  pass rate, tokens and cost. `defineEval({ name, agent, cases, models, setup, judgeModel, prices, repeat })`,
+  `runEval(suite, { beforeEach, models, repeat, filter, onAttempt })` and `formatEvalReport(report)`. Checks:
+  `calledTool(name, input?, { times })` (partial input match), `notCalledTool`, `noToolErrors`, `answerMatches`,
+  `maxSteps`, `check(name, fn)` and `judge(rubric)` (a judge model grades the run). Runs go one at a time without
+  conversation memory; a failed run is reported, not thrown. `GHURI_EVAL_MODELS`, `GHURI_EVAL_REPEAT`,
+  `GHURI_EVAL_CASE` and `GHURI_EVAL_REPORT_DIR` (set by `ghuri eval`) override the suite. Also `costOf()` and
+  `parseVerdict()`.
+
 ## 0.1.0-alpha.3
 
 - Queued runs keep their request context: `enqueue()` stores `captureContext()` from `@ghuri/core` in the job
