@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.5
 
 Tool shaping, to help smaller models use many tools well. Everything is opt-in; agents that set nothing behave
 as before.
