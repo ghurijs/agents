@@ -41,6 +41,8 @@ export interface AgentsSettings {
    * (prompts and answers: mind privacy and retention).
    */
   TRACE_RUNS?: boolean | { messages?: boolean }
+  /** Check tool arguments against their schemas before tools run, for agents that don't set `strictToolInput`. */
+  STRICT_TOOL_INPUT?: boolean
   /**
    * The conversation model, `'app_label.ModelName'` (default `'agents.Conversation'`), like Django's
    * `AUTH_USER_MODEL`. Point it at your own model built from `conversationFields` (e.g. a tenant-scoped one) before

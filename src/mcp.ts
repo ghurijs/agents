@@ -37,6 +37,7 @@ import {
 import { agentsSettings, defaultPermissionClasses } from './settings'
 import { runTool } from './tools/execute'
 import { sanitizeToolName } from './tools/schema'
+import { describeTool } from './tools/shaping'
 import { isToolDecorator, standaloneTool } from './tools/tool'
 import { type AgentTool, isAgentTool, isToolkit, type ToolContext } from './tools/types'
 
@@ -205,7 +206,7 @@ export class McpServer {
       .map((t) => ({
         name: t.name,
         ...(t.annotations?.title ? { title: t.annotations.title } : {}),
-        description: t.description,
+        description: describeTool(t),
         inputSchema: t.inputSchema,
         ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
         ...(t.annotations ? { annotations: t.annotations } : {}),

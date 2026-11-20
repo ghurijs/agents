@@ -22,6 +22,8 @@ export interface ToolOptions<S = z.ZodType | JSONSchema | undefined> {
   annotations?: ToolAnnotations
   /** OAuth scopes required to see and call the tool over MCP in OAuth mode. */
   scopes?: string[]
+  /** Example arguments shown to models after the description (at most three are shown). */
+  examples?: Array<Record<string, unknown>>
   /** Standalone tools: the implementation (methods decorated with `@tool` don't need it). */
   execute?: (input: InputOf<S>, ctx: ToolContext) => unknown
 }
@@ -115,6 +117,7 @@ export function defineTool(
     ...(opts.output ? { outputSchema: opts.output } : {}),
     ...(opts.annotations ? { annotations: opts.annotations } : {}),
     ...(opts.scopes?.length ? { scopes: [...opts.scopes] } : {}),
+    ...(opts.examples?.length ? { examples: [...opts.examples] } : {}),
     parse: makeParser(opts.input),
     execute,
   }

@@ -1,4 +1,5 @@
 import type { BaseRouter, RouterRegistration } from '@ghuri/rest'
+import type { ResultFields } from './shaping'
 import { type AgentTool, Toolkit } from './types'
 import { ViewSetTools } from './viewset'
 
@@ -11,6 +12,10 @@ export interface RouterToolsOptions {
   actions?: Record<string, string[]>
   /** Only read-only actions (GET). */
   readOnly?: boolean
+  /** Fields to return per registration (by prefix or basename), as `ViewSetTools`' `resultFields`. */
+  resultFields?: Record<string, ResultFields>
+  /** Leave empty values out of every result (default false). */
+  compact?: boolean
 }
 
 function matches(entry: RouterRegistration, spec: string[] | ((e: RouterRegistration) => boolean)): boolean {
@@ -45,7 +50,14 @@ export class RouterTools extends Toolkit {
         actions = (actions ?? entry.actions).filter((a) => safe.has(a))
       }
       if (actions && !actions.length) continue
-      out.push(new ViewSetTools(entry, actions ? { actions } : {}))
+      const resultFields = this.opts.resultFields?.[entry.prefix] ?? this.opts.resultFields?.[entry.basename]
+      out.push(
+        new ViewSetTools(entry, {
+          ...(actions ? { actions } : {}),
+          ...(resultFields ? { resultFields } : {}),
+          ...(this.opts.compact ? { compact: true } : {}),
+        }),
+      )
     }
     return out
   }

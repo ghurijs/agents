@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+Tool shaping, to help smaller models use many tools well. Everything is opt-in; agents that set nothing behave
+as before.
+
+- `Agent.toolSearch` (`true` or `{ alwaysLoaded, maxResults }`): only the `alwaysLoaded` tools and a `find_tools`
+  tool are sent. `find_tools({ query?, names? })` loads matching tools (name, title, description; plural-insensitive)
+  from the model's next step on and for the rest of the conversation (read back from the history), through the AI
+  SDK's `activeTools` / `prepareStep`. Its description lists every loadable tool's name, and a sentence is added to
+  the instructions. An unknown `alwaysLoaded` name or an own tool named `find_tools` is `ImproperlyConfigured`.
+  Also exported: `FIND_TOOLS`, `searchTools()`, `ToolSearchOptions`.
+- `Agent.strictToolInput` / `AGENTS.STRICT_TOOL_INPUT`: check arguments against the tool's input schema before it
+  runs (unknown and missing arguments, `enum` values, top-level types; numeric strings count as numbers) and return
+  one plain `ToolInputError` message the model can correct. The history keeps the arguments as sent.
+  `checkToolInput(schema, input)` is exported.
+- `resultFields` (per action, `'*'` fallback) and `compact` on `ModelTools`, `ViewSetTools` and `RouterTools`
+  (per registration): return only those fields of an object / of each row of a list (paging keys kept), and drop
+  `null`, `''`, `[]` and `{}` values. Also `shapeResult()` and `compactValue()`.
+- `examples` on `tool()` / `@tool`, `AgentTool`, and per action on `ModelTools` / `ViewSetTools`: shown to agents
+  and in MCP `tools/list` as `Example input: {...}` lines after the description (at most three; `describeTool()`).
+- `toolReport(agent | tools)` and `formatToolReport()` in `@ghuri/agents/evals`: per tool, description and schema
+  size, a rough token count and the arguments without a description.
+
 ## 0.1.0-alpha.4
 
 - `@ghuri/agents/evals`: measure how well an agent does real tasks with a given model, and compare models on

@@ -2,6 +2,7 @@ import { ImproperlyConfigured } from '@ghuri/core'
 import { RouterRegistration, SimpleRouter } from '@ghuri/rest'
 import { ToolError } from '../errors'
 import { cleanInputSchema, parametersToProperties, sanitizeToolName, snakeCase } from './schema'
+import { type ResultFields, resultFieldsFor, shapeResult } from './shaping'
 import { type AgentTool, type JSONSchema, type ToolAnnotations, type ToolContext, Toolkit } from './types'
 
 /** Friendly aliases accepted in `actions` lists. */
@@ -28,6 +29,16 @@ export interface ViewSetToolsOptions {
    * ['posts:write'], '*': ['posts'] }`; `'*'` applies to actions without an entry).
    */
   scopes?: ToolScopes
+  /**
+   * Fields to return, for every action or per action (`{ list: ['id', 'title', 'status'], '*': [...] }`): only these
+   * top-level fields of the object, or of each row of a list. Short results cost fewer tokens and are easier for
+   * smaller models to read. Default: everything the serializer returns.
+   */
+  resultFields?: ResultFields
+  /** Leave `null`, empty strings and empty lists / objects out of results (default false). */
+  compact?: boolean
+  /** Example arguments per action (`{ create: [{ title: 'Blue shirt', price: '1200.00' }] }`), shown to models. */
+  examples?: Record<string, Array<Record<string, unknown>>>
 }
 
 /** Scopes for every tool, or per action name with `'*'` as the fallback. */
@@ -112,9 +123,12 @@ export class ViewSetTools extends Toolkit {
 
   getTools(): AgentTool[] {
     return this.actionSpecs().map((spec) => {
-      const t = this.buildTool(spec)
+      let t = this.buildTool(spec)
       const scopes = scopesFor(this.scopeOption(), spec.suffix, spec.action)
-      return scopes?.length ? { ...t, scopes: [...scopes] } : t
+      if (scopes?.length) t = { ...t, scopes: [...scopes] }
+      const examples = this.opts.examples?.[spec.suffix] ?? this.opts.examples?.[spec.action]
+      if (examples?.length) t = { ...t, examples: [...examples] }
+      return t
     })
   }
 
@@ -251,6 +265,11 @@ export class ViewSetTools extends Toolkit {
       openWorldHint: false,
     }
     const entry = this.entry
+    const shape = {
+      fields: resultFieldsFor(this.opts.resultFields, spec.suffix, spec.action),
+      compact: this.opts.compact === true,
+    }
+    const shaped = shape.compact || !!shape.fields?.length
     return {
       name: sanitizeToolName(`${this.prefix}_${spec.suffix}`),
       description: this.describe(spec, endpoint),
@@ -293,7 +312,8 @@ export class ViewSetTools extends Toolkit {
         // Anonymous users are passed as "no credentials" so views answer 401-style errors like over HTTP.
         const user = ctx.user?.isAuthenticated ? ctx.user : null
         const res = await entry.invoke(spec.action, { user, kwargs, query, data, method })
-        return toolResult(res.status, res.data)
+        const result = toolResult(res.status, res.data)
+        return shaped ? shapeResult(result, shape) : result
       },
     }
   }

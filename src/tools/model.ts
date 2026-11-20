@@ -9,6 +9,7 @@ import {
   SearchFilter,
 } from '@ghuri/rest'
 import { sanitizeToolName } from './schema'
+import type { ResultFields } from './shaping'
 import { type ActionToolSpec, type ToolScopes, ViewSetTools } from './viewset'
 
 export type ModelToolAction = 'list' | 'retrieve' | 'create' | 'update' | 'delete'
@@ -54,6 +55,12 @@ export interface ModelToolsOptions {
   descriptions?: Partial<Record<ModelToolAction, string>>
   /** OAuth scopes for MCP: for every tool, or per action (`{ list: ['posts:read'], create: ['posts:write'] }`). */
   scopes?: ToolScopes
+  /** Fields to return, for every action or per action (`{ list: ['id', 'title', 'status'] }`). */
+  resultFields?: ResultFields
+  /** Leave `null`, empty strings and empty lists / objects out of results (default false). */
+  compact?: boolean
+  /** Example arguments per action (`{ create: [{ title: 'Blue shirt' }] }`), shown to models. */
+  examples?: Partial<Record<ModelToolAction, Array<Record<string, unknown>>>>
 }
 
 function defaultSerializer(model: any): any {
@@ -133,7 +140,13 @@ export class ModelTools extends ViewSetTools {
     const prefix =
       opts.prefix ??
       sanitizeToolName(String(model._meta.verboseNamePlural).replace(/\s+/g, '_').toLowerCase())
-    super(buildViewSet(model, opts), { prefix, basename: model._meta.modelName })
+    super(buildViewSet(model, opts), {
+      prefix,
+      basename: model._meta.modelName,
+      resultFields: opts.resultFields,
+      compact: opts.compact,
+      examples: opts.examples as Record<string, Array<Record<string, unknown>>> | undefined,
+    })
     this.modelClass = model
     this.modelOptions = opts
   }
