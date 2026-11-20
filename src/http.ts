@@ -11,12 +11,14 @@ import {
   NotAuthenticated,
   NotFound,
   ValidationError as RestValidationError,
+  Throttled,
 } from '@ghuri/rest'
+import { APICallError } from 'ai'
 import type { Agent, AgentInput } from './agent'
 import { ModelResolutionError } from './errors'
 import { McpServer, type McpServerOptions } from './mcp'
 import { ConversationNotFound, getConversation, memoryAvailable } from './memory'
-import { Conversation, Message } from './models'
+import { getConversationModel, Message } from './models'
 import { consumeAgentQueue } from './queue'
 import { agentsSettings } from './settings'
 
@@ -30,6 +32,46 @@ export class ModelUnavailable extends APIException {
   static override statusCode = 503
   static override defaultDetail = "The agent's language model is not available."
   static override defaultCode = 'model_unavailable'
+}
+
+/** HTTP status and headers of a failed model call (AI SDK `APICallError`, also inside a `RetryError`). */
+function providerFailure(err: unknown): { status: number; headers: Record<string, string> } | undefined {
+  let e: any = err
+  for (let i = 0; e && i < 4; i++) {
+    // Only provider call errors: API exceptions (PermissionDenied, NotAuthenticated…) carry a statusCode too.
+    if (APICallError.isInstance(e) && typeof e.statusCode === 'number') {
+      return { status: e.statusCode, headers: e.responseHeaders ?? {} }
+    }
+    e = e.lastError ?? e.cause
+  }
+  return undefined
+}
+
+function retryAfterSeconds(headers: Record<string, string>): number | null {
+  const raw = headers['retry-after'] ?? headers['Retry-After']
+  if (!raw) return null
+  const n = Number(raw)
+  if (Number.isFinite(n)) return Math.max(0, n)
+  const at = Date.parse(raw)
+  return Number.isNaN(at) ? null : Math.max(0, (at - Date.now()) / 1000)
+}
+
+/**
+ * Map a provider / gateway failure to an API error: 429 (rate limit or spending cap) becomes `Throttled` with
+ * `Retry-After`, and 401 / 402 / 403 (bad key, billing) become `ModelUnavailable`, because they are the
+ * deployment's problem, not the caller's. Anything else is returned unchanged.
+ */
+export function modelCallError(err: unknown): unknown {
+  const f = providerFailure(err)
+  if (!f) return err
+  const debug = tryGetContext()?.settings.DEBUG
+  if (f.status === 429) {
+    return new Throttled(retryAfterSeconds(f.headers), 'The language model is busy or over its usage limit.')
+  }
+  if (f.status === 401 || f.status === 402 || f.status === 403) {
+    return new ModelUnavailable(debug && err instanceof Error ? err.message : undefined)
+  }
+  return err
 }
 
 /** `AGENTS.AUTHENTICATION_CLASSES`, else `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`. */
@@ -126,7 +168,7 @@ export class AgentChatView extends AgentBaseView {
       if (err instanceof ConversationNotFound) throw new NotFound(err.message)
       if (err instanceof ModelResolutionError)
         throw new ModelUnavailable(tryGetContext()?.settings.DEBUG ? err.message : undefined)
-      throw err
+      throw modelCallError(err)
     }
   }
 }
@@ -149,7 +191,7 @@ export class ConversationListView extends AgentBaseView {
     if (!request.user.isAuthenticated) throw new NotAuthenticated()
     const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 200)
     const offset = Math.max(Number(request.query.offset) || 0, 0)
-    const qs = Conversation.objects.filter({ agent: this.agentName, user: request.user.pk })
+    const qs = getConversationModel().objects.filter({ agent: this.agentName, user: request.user.pk })
     const [count, rows] = await Promise.all([
       qs.count(),
       qs.orderBy('-updatedAt').slice(offset, offset + limit),

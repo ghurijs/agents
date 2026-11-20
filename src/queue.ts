@@ -8,6 +8,7 @@ import {
   tryGetContext,
 } from '@ghuri/core'
 import type { Agent, AgentInput } from './agent'
+import { captureCarried, restoreCarried } from './carry'
 import { createConversation, memoryAvailable, ownerPk, titleFrom } from './memory'
 import { agentsSettings } from './settings'
 
@@ -20,6 +21,11 @@ export interface AgentJob {
   userId: unknown
   conversationId?: string
   context?: Record<string, unknown>
+  /**
+   * Request context to restore around the run (`captureContext()` of `@ghuri/core`, e.g. `{ tenant: '42' }`).
+   * Left out when there is nothing to carry.
+   */
+  carried?: Record<string, string>
 }
 
 export const AGENT_JOB_TYPE = 'ghuri.agents.run'
@@ -53,6 +59,7 @@ export async function enqueueRun(
     const conv = await createConversation(agent.getName(), opts.user, { title: titleFrom(input) })
     conversationId = String(conv.pk)
   }
+  const carried = captureCarried()
   const job: AgentJob = {
     type: AGENT_JOB_TYPE,
     agent: agent.getName(),
@@ -60,6 +67,7 @@ export async function enqueueRun(
     userId: ownerPk(opts.user),
     ...(conversationId ? { conversationId } : {}),
     ...(opts.context ? { context: opts.context } : {}),
+    ...(Object.keys(carried).length ? { carried } : {}),
   }
   await queue.send(job)
   return { conversationId }
@@ -75,7 +83,8 @@ export async function loadJobUser(userId: unknown): Promise<RequestUser> {
 
 /**
  * Register a queue consumer running queued agent jobs with `create(name)` (an `AgentRouter`'s factory).
- * Messages that are not agent jobs are left alone; failed runs are retried.
+ * Each run happens inside the request context captured by `enqueue()` (the tenant, …). Messages that are not agent
+ * jobs are left alone; failed runs are retried.
  */
 export function consumeAgentQueue(queue: string, create: (name: string) => Agent): () => void {
   return onQueue(queue, async (batch: MessageBatchLike<any>) => {
@@ -84,11 +93,13 @@ export function consumeAgentQueue(queue: string, create: (name: string) => Agent
       if (!job || job.type !== AGENT_JOB_TYPE) continue
       try {
         const agent = create(job.agent)
-        const user = await loadJobUser(job.userId)
-        await agent.run(job.input, {
-          user,
-          conversationId: job.conversationId ?? null,
-          context: job.context,
+        await restoreCarried(job.carried, async () => {
+          const user = await loadJobUser(job.userId)
+          await agent.run(job.input, {
+            user,
+            conversationId: job.conversationId ?? null,
+            context: job.context,
+          })
         })
         msg.ack()
       } catch (err) {

@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+- Queued runs keep their request context: `enqueue()` stores `captureContext()` from `@ghuri/core` in the job
+  (`carried`, left out when empty) and the consumer runs inside `restoreContext()`. With `@ghuri/tenants`, a queued
+  run now happens as the tenant that enqueued it, instead of with no tenant (where tenant-scoped tools failed with
+  `TenantNotSet`). Jobs already in a queue without `carried` run as before.
+- Providers get the run: `resolveModel(model, env?, run?)` and agent runs pass `ProviderContext.run`
+  (`{ agent, user, carried }`, new type `ProviderRunInfo`) to provider factories. `AGENTS.PROVIDERS[name].headers`
+  may be a function of the provider context, called once per run, so headers can name the agent, user or tenant.
+- Built-in `ghuri-ai:` provider for a ghuri-ai model gateway (`PROVIDERS['ghuri-ai']: { baseURL, apiKey }` or
+  `GHURI_AI_URL` / `GHURI_AI_API_KEY`): `ghuri-ai:<alias>` uses the OpenAI-compatible `/v1/chat/completions`;
+  `ghuri-ai:anthropic/<model>` and `ghuri-ai:openai/<model>` use the gateway's pass-through routes with the provider
+  SDKs. Calls carry `x-ghuri-agent`, `x-ghuri-user` and `x-ghuri-<name>` per carried value (`x-ghuri-tenant`);
+  `ghuriAIHeaders(run)` is exported.
+- The chat endpoint maps provider failures: 429 (rate limit, spending cap) answers 429 with `Retry-After` instead of
+  500, and 401 / 402 / 403 from the provider answer 503 (`ModelUnavailable`). `modelCallError(err)` is exported for
+  custom views. API exceptions (`PermissionDenied`, …) are unchanged.
+- `runFinished` signal after every run, successful or failed (`agent`, `context`, `model`, `result` / `error`,
+  `durationMs`, `run`); receivers that throw are logged and never fail the run. Also `modelLabel(model)`.
+- Opt-in run traces: `AGENTS.TRACE_RUNS: true` saves one `Run` per run (table `agents_run`, new migration
+  `agents.0002_run`: run `ghuri migrate`) with model, conversation, user, status, finish reason, steps, input / output
+  / cached tokens, usage, tool calls, carried context, error and duration; `{ messages: true }` also stores the
+  messages. Off by default, and a trace that can't be saved warns once without failing the run.
+- `Conversation` is swappable with `AGENTS.CONVERSATION_MODEL` (default `'agents.Conversation'`), like
+  `AUTH_USER_MODEL`: build your own model from the exported `conversationFields` (or `AbstractConversation`), for
+  example a tenant-scoped `StoreModel({ ...conversationFields })`, so a user who belongs to two stores only sees
+  the current store's conversations. `getConversation()`, `createConversation()`, `saveMessages()`, the
+  conversation list / detail views, `Message.conversation` and `Run.conversation` use `getConversationModel()`.
+  Projects that don't set it see no change. Swapping on a database that already has conversations needs a short
+  migration (in the docs: the new model adopts `agents_conversation`).
+- The shipped migrations name the user and conversation models with `swappableModel()` /
+  `swappableDependency()` instead of adapting `auth.User` references at load time (same tables, same names; the
+  internal `migrationsForUserModel()` is gone). `0001_initial`'s `CreateModel Conversation` records
+  `swappable: 'AGENTS.CONVERSATION_MODEL'`. Needs the `@ghuri/orm` release with swappable models.
+
 ## 0.1.0-alpha.2
 
 - MCP protocol revision **2026-07-28** (stateless) next to the legacy revisions on the same endpoint: no `initialize`

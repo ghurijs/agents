@@ -1,4 +1,5 @@
-import { taskHandlers } from '@ghuri/core'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { registerContextCarrier, taskHandlers, unregisterContextCarrier } from '@ghuri/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Agent, AgentRouter, Conversation, Message, ModelTools } from '../src/index'
 import { backends, makeUser, useHarness } from './helpers'
@@ -60,6 +61,41 @@ for (const using of backends) {
       expect(rows.map((r) => r.role)).toEqual(['user', 'assistant'])
       expect(rows[1].content).toEqual([{ type: 'text', text: 'Background done.' }])
       delete h.env.AGENTS_QUEUE
+    })
+
+    it('enqueue() carries the request context; the consumer restores it around the run', async () => {
+      const store = new AsyncLocalStorage<string>()
+      registerContextCarrier({
+        name: 'store',
+        capture: () => store.getStore(),
+        restore: (value, fn) => store.run(value, fn),
+      })
+      try {
+        const alice = await makeUser('alice')
+        const sent: any[] = []
+        h.env.AGENTS_QUEUE = { send: async (body: unknown) => void sent.push(body) }
+        const seen: Array<string | undefined> = []
+        class Worker extends Agent {
+          override model = scriptedModel([[{ type: 'text', text: 'Done.' }]])
+          override permissionClasses = []
+          override async beforeRun() {
+            seen.push(store.getStore())
+          }
+        }
+        const router = new AgentRouter().register('worker', Worker)
+        await store.run('s-42', () => router.create('worker').enqueue('later', { user: alice }))
+        expect(sent[0].carried).toEqual({ store: 's-42' })
+
+        router.consumeQueue('agents')
+        const [handler] = taskHandlers.queuesFor('agents')
+        const msg = { id: '1', timestamp: new Date(), body: sent[0], ack: vi.fn(), retry: vi.fn() }
+        await handler({ queue: 'agents', messages: [msg], ackAll: vi.fn(), retryAll: vi.fn() }, h.ctx)
+        expect(msg.ack).toHaveBeenCalled()
+        expect(seen).toEqual(['s-42'])
+      } finally {
+        unregisterContextCarrier('store')
+        delete h.env.AGENTS_QUEUE
+      }
     })
   })
 }

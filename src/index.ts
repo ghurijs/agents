@@ -24,6 +24,7 @@ export {
   ConversationDetailView,
   ConversationListView,
   ModelUnavailable,
+  modelCallError,
 } from './http'
 export {
   type AgentSource,
@@ -52,7 +53,20 @@ export {
   memoryAvailable,
   saveMessages,
 } from './memory'
-export { Conversation, MESSAGE_ROLES, Message, type MessageRole } from './models'
+export {
+  AbstractConversation,
+  Conversation,
+  type ConversationModelClass,
+  conversationFields,
+  DEFAULT_CONVERSATION_MODEL,
+  getConversationModel,
+  MESSAGE_ROLES,
+  Message,
+  type MessageRole,
+  RUN_STATUSES,
+  Run,
+  type RunStatus,
+} from './models'
 export {
   bearerChallenge,
   canonicalResourceUrl,
@@ -69,9 +83,11 @@ export {
 } from './oauth'
 export {
   getProviders,
+  ghuriAIHeaders,
   isLanguageModel,
   type ProviderContext,
   type ProviderFactory,
+  type ProviderRunInfo,
   registerProvider,
   resolveModel,
   unregisterProvider,
@@ -116,3 +132,4 @@ export {
   ViewSetTools,
   type ViewSetToolsOptions,
 } from './tools/viewset'
+export { modelLabel, type RunFinishedArgs, runFinished } from './trace'

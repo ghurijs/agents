@@ -121,7 +121,9 @@ export const urlpatterns = [
 ```
 
 The agents app ships its migration (`Conversation`, `Message`; the user foreign key follows
-`AUTH_USER_MODEL`): create the tables with `ghuri migrate`.
+`AUTH_USER_MODEL`): create the tables with `ghuri migrate`. `Conversation` is swappable: set
+`AGENTS.CONVERSATION_MODEL` to your own model built from `conversationFields` (for example a tenant-scoped
+`StoreModel({ ...conversationFields })`) before the first `migrate`.
 
 ```bash
 curl -X POST https://shop.example.com/agents/support/chat \
@@ -143,6 +145,7 @@ curl -X POST https://shop.example.com/agents/support/chat \
 | `workers-ai:` | `workers-ai-provider` | the `AI` binding (`AGENTS.AI_BINDING`) |
 | `anthropic:` | `@ai-sdk/anthropic` | `AGENTS.PROVIDERS.anthropic.apiKey`, else env `ANTHROPIC_API_KEY` |
 | `openai:` | `@ai-sdk/openai` | `AGENTS.PROVIDERS.openai.apiKey`, else env `OPENAI_API_KEY` |
+| `ghuri-ai:` | `@ai-sdk/openai` / `@ai-sdk/anthropic` | `AGENTS.PROVIDERS['ghuri-ai']: { baseURL, apiKey }`, else env `GHURI_AI_URL` / `GHURI_AI_API_KEY` |
 
 ```ts
 class Analyst extends Agent {
@@ -165,6 +168,16 @@ registerProvider('google', async (id, { config, env }) => {
   return createGoogleGenerativeAI({ apiKey: config.apiKey ?? env.GOOGLE_API_KEY })(id)
 })
 ```
+
+`headers` may be a function, called once per run with the provider context, whose `run` is
+`{ agent, user, carried }` (`carried` is `captureContext()` from `@ghuri/core`, e.g. `{ tenant: '42' }`). Factories
+registered with `registerProvider` receive the same `run`.
+
+`ghuri-ai:` talks to a ghuri-ai model gateway: `ghuri-ai:<alias>` (`fast`, `smart`) goes to its OpenAI-compatible
+`/v1/chat/completions`, `ghuri-ai:anthropic/<model>` and `ghuri-ai:openai/<model>` to its pass-through routes with the
+provider SDKs (so `providerOptions` keep working). Calls carry `x-ghuri-agent`, `x-ghuri-user` and `x-ghuri-tenant`
+for metering and budgets. A provider 429 (rate limit, spending cap) answers 429 with `Retry-After` on the chat
+endpoint; 401 / 402 / 403 answer 503.
 
 ## 4. Tools from your API
 
@@ -423,7 +436,16 @@ const { conversationId } = await agents.create('support').enqueue('Summarize my 
 ```
 
 The consumer reloads the user (`AUTH_USER_MODEL`), runs the agent and stores the result in the conversation
-(created up front so you can poll `GET …/conversations/<id>/`). Failed runs are retried by the queue.
+(created up front so you can poll `GET …/conversations/<id>/`). Failed runs are retried by the queue. The job
+carries the request context (`captureContext()`), so with `@ghuri/tenants` the run happens as the tenant that
+enqueued it.
+
+### Run traces
+
+`runFinished` (a signal) is sent after every run with `agent`, `context`, `model`, `result` or `error` and
+`durationMs`; receivers that throw never fail the run. With `AGENTS.TRACE_RUNS: true` each run is also saved as a
+`Run` (table `agents_run`, migration `0002_run`): model, conversation, user, status, steps, tokens, tool calls,
+carried context, error and duration. `{ messages: true }` also stores the messages (prompts and answers).
 
 ## 11. Security model
 
@@ -453,6 +475,7 @@ AGENTS: {
   AUTHENTICATION_CLASSES: [TokenAuthentication, SessionAuthentication],   // default: REST defaults
   PERMISSION_CLASSES: [IsAuthenticated],                   // default for agents / MCP
   QUEUE_BINDING: 'AGENTS_QUEUE',                           // enqueue() producer binding
+  TRACE_RUNS: false,                                       // true / { messages: true }: save a Run per run
 }
 ```
 

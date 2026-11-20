@@ -1,14 +1,27 @@
-import { type Env, tryGetContext } from '@ghuri/core'
+import { type Env, type RequestUser, tryGetContext } from '@ghuri/core'
 import type { LanguageModel } from 'ai'
+import { captureCarried } from './carry'
 import { ModelResolutionError } from './errors'
 import { type AgentsSettings, agentsSettings, type ProviderConfig } from './settings'
+
+/** Who a model is resolved for: set when an agent run resolves its model. */
+export interface ProviderRunInfo {
+  /** The agent's registered name. */
+  agent: string
+  /** The user the run acts for (anonymous when nobody signed in). */
+  user: RequestUser
+  /** The request context carried by `@ghuri/core` context carriers (`{ tenant: '42' }`), `{}` when none. */
+  carried: Record<string, string>
+}
 
 export interface ProviderContext {
   /** Worker bindings / environment variables of the current request. */
   env: Env
   settings: AgentsSettings
-  /** `AGENTS.PROVIDERS[name]` (empty object when unset). */
+  /** `AGENTS.PROVIDERS[name]`, with a `headers` function already called (empty object when unset). */
   config: ProviderConfig
+  /** The run the model is for; absent when `resolveModel()` is called outside an agent run. */
+  run?: ProviderRunInfo
 }
 
 /** Builds a model for `'<provider>:<modelId>'`. Import provider packages lazily inside the factory. */
@@ -109,6 +122,67 @@ registerProvider('openai', async (modelId, ctx) => {
   return mod.createOpenAI({ ...withoutKnown(ctx.config), apiKey: apiKey(ctx, 'OPENAI_API_KEY') })(modelId)
 })
 
+function configValue(ctx: ProviderContext, key: string, envName: string): string | undefined {
+  const v = ctx.config[key] ?? ctx.env?.[envName] ?? processEnv(envName)
+  return typeof v === 'string' && v ? v : undefined
+}
+
+/**
+ * Headers naming who a ghuri-ai call is for: `x-ghuri-agent`, `x-ghuri-user` (authenticated users only) and one
+ * `x-ghuri-<name>` per carried context value (`x-ghuri-tenant`). Used for metering and budgets.
+ */
+export function ghuriAIHeaders(run: ProviderRunInfo | undefined): Record<string, string> {
+  if (!run) return {}
+  const out: Record<string, string> = { 'x-ghuri-agent': run.agent }
+  if (run.user?.isAuthenticated && run.user.pk !== null && run.user.pk !== undefined) {
+    out['x-ghuri-user'] = String(run.user.pk)
+  }
+  for (const [name, value] of Object.entries(run.carried ?? {})) {
+    if (/^[a-z0-9-]+$/i.test(name)) out[`x-ghuri-${name.toLowerCase()}`] = value
+  }
+  return out
+}
+
+// ghuri-ai: the model gateway. `ghuri-ai:<alias>` (`fast`, `smart`, …) goes to its OpenAI-compatible
+// `/v1/chat/completions`; `ghuri-ai:anthropic/<model>` and `ghuri-ai:openai/<model>` go to its pass-through routes
+// with the provider's own SDK, so provider options (Anthropic prompt caching, thinking) keep working.
+registerProvider('ghuri-ai', async (modelId, ctx) => {
+  const base = configValue(ctx, 'baseURL', 'GHURI_AI_URL')?.replace(/\/+$/, '')
+  if (!base) {
+    throw new ModelResolutionError(
+      "The 'ghuri-ai:' model provider needs the gateway URL: set AGENTS.PROVIDERS['ghuri-ai'].baseURL or GHURI_AI_URL.",
+    )
+  }
+  const key = apiKey(ctx, 'GHURI_AI_API_KEY')
+  const { apiKey: _k, baseURL: _b, headers: configHeaders, ...rest } = ctx.config
+  const headers = { ...ghuriAIHeaders(ctx.run), ...((configHeaders as Record<string, string>) ?? {}) }
+  const slash = modelId.indexOf('/')
+  const via = slash > 0 ? modelId.slice(0, slash) : ''
+  if (via === 'anthropic') {
+    let mod: typeof import('@ai-sdk/anthropic')
+    try {
+      mod = await import('@ai-sdk/anthropic')
+    } catch (err) {
+      throw missingPackage('@ai-sdk/anthropic', 'ghuri-ai', err)
+    }
+    return mod.createAnthropic({ ...rest, baseURL: `${base}/v1/anthropic`, apiKey: key, headers })(
+      modelId.slice(slash + 1),
+    )
+  }
+  let mod: typeof import('@ai-sdk/openai')
+  try {
+    mod = await import('@ai-sdk/openai')
+  } catch (err) {
+    throw missingPackage('@ai-sdk/openai', 'ghuri-ai', err)
+  }
+  if (via === 'openai') {
+    return mod.createOpenAI({ ...rest, baseURL: `${base}/v1/openai`, apiKey: key, headers })(
+      modelId.slice(slash + 1),
+    )
+  }
+  return mod.createOpenAI({ ...rest, baseURL: `${base}/v1`, apiKey: key, headers }).chat(modelId)
+})
+
 /** Is `value` an AI SDK language model instance (not a string id)? */
 export function isLanguageModel(value: unknown): boolean {
   return (
@@ -121,10 +195,14 @@ export function isLanguageModel(value: unknown): boolean {
 
 /**
  * Resolve an agent's `model`: an AI SDK `LanguageModel` is returned as is; `'provider:model-id'` strings go
- * through the provider registry (`workers-ai:`, `anthropic:`, `openai:` built in). Falls back to
+ * through the provider registry (`workers-ai:`, `anthropic:`, `openai:`, `ghuri-ai:` built in). Falls back to
  * `AGENTS.DEFAULT_MODEL`.
  */
-export async function resolveModel(model?: string | LanguageModel | null, env?: Env): Promise<LanguageModel> {
+export async function resolveModel(
+  model?: string | LanguageModel | null,
+  env?: Env,
+  run?: Omit<ProviderRunInfo, 'carried'> & { carried?: Record<string, string> },
+): Promise<LanguageModel> {
   const settings = agentsSettings()
   const m = model ?? settings.DEFAULT_MODEL
   if (!m) {
@@ -147,9 +225,14 @@ export async function resolveModel(model?: string | LanguageModel | null, env?: 
       `Unknown model provider '${name}' in '${m}' (registered: ${getProviders().join(', ')}). Use registerProvider().`,
     )
   }
-  return factory(modelId, {
+  const ctx: ProviderContext = {
     env: env ?? tryGetContext()?.env ?? {},
     settings,
     config: settings.PROVIDERS?.[name] ?? {},
-  })
+    ...(run ? { run: { ...run, carried: run.carried ?? captureCarried() } } : {}),
+  }
+  if (typeof ctx.config.headers === 'function') {
+    ctx.config = { ...ctx.config, headers: await ctx.config.headers(ctx) }
+  }
+  return factory(modelId, ctx)
 }

@@ -38,6 +38,7 @@ import { agentsSettings, DEFAULT_MAX_STEPS, defaultPermissionClasses } from './s
 import { inContext, toToolError } from './tools/execute'
 import { collectDeclaredTools, isToolDecorator, standaloneTool, type ToolDecorator } from './tools/tool'
 import { type AgentTool, isAgentTool, isToolkit, type ToolContext, type Toolkit } from './tools/types'
+import { modelLabel, recordRun } from './trace'
 
 /** What can go in an agent's `tools`: toolkits, standalone `tool({...execute})`s and `AgentTool`s. */
 export type ToolEntry = Toolkit | ToolDecorator | AgentTool
@@ -115,6 +116,8 @@ interface Prepared {
   instructions?: string
   tools: ToolSet
   ghuri?: GhuriContext
+  /** `Date.now()` when the run started (after permissions and model resolution). */
+  startedAt: number
 }
 
 function deriveName(cls: Function): string {
@@ -306,9 +309,9 @@ export class Agent {
   protected async prepare(input: AgentInput, opts: RunOptions): Promise<Prepared> {
     const user = opts.user ?? anonymousUser
     if (opts.checkPermissions) await this.checkPermissions(user, opts.request)
-    // Resolve the model first: a missing provider / key / binding must not leave an empty conversation behind.
-    const model = await resolveModel(this.model)
     const agentName = this.getName()
+    // Resolve the model first: a missing provider / key / binding must not leave an empty conversation behind.
+    const model = await resolveModel(this.model, undefined, { agent: agentName, user })
     const useMemory = opts.memory ?? (this.memory !== false && memoryAvailable())
     let conversation: Conversation | undefined
     let history: ModelMessage[] = []
@@ -340,7 +343,14 @@ export class Agent {
     }
     await this.beforeRun?.(ctx)
     const instructions = await this.getInstructions(ctx)
-    return { ctx, model, instructions, tools: this.buildToolSet(ctx), ghuri: tryGetContext() }
+    return {
+      ctx,
+      model,
+      instructions,
+      tools: this.buildToolSet(ctx),
+      ghuri: tryGetContext(),
+      startedAt: Date.now(),
+    }
   }
 
   protected callSettings(p: Prepared): Record<string, unknown> {
@@ -380,7 +390,20 @@ export class Agent {
       conversationId: p.ctx.conversationId,
     }
     await this.afterRun?.(result, p.ctx)
+    await this.recordRun(p, result)
     return result
+  }
+
+  /** Trace a finished run (`AGENTS.TRACE_RUNS`) and send `runFinished`. Never throws. */
+  protected async recordRun(p: Prepared, result?: AgentRunResult, error?: unknown): Promise<void> {
+    await recordRun({
+      agent: this,
+      context: p.ctx,
+      model: modelLabel(this.model ?? p.model),
+      ...(result ? { result } : {}),
+      ...(error !== undefined ? { error } : {}),
+      durationMs: Date.now() - p.startedAt,
+    })
   }
 
   /**
@@ -389,7 +412,13 @@ export class Agent {
    */
   async run(input: AgentInput, opts: RunOptions = {}): Promise<AgentRunResult> {
     const p = await this.prepare(input, opts)
-    const res = await generateText(this.callSettings(p) as any)
+    let res: Awaited<ReturnType<typeof generateText>>
+    try {
+      res = await generateText(this.callSettings(p) as any)
+    } catch (err) {
+      await this.recordRun(p, undefined, err)
+      throw err
+    }
     return this.finish(p, {
       text: res.text,
       responseMessages: res.responseMessages as ModelMessage[],
@@ -416,14 +445,21 @@ export class Agent {
     const p = await this.prepare(input, opts)
     const result = streamText(this.callSettings(p) as any) as StreamTextResult<ToolSet, any, any>
     const done = (async () => {
-      const [text, responseMessages, content, usage, finishReason, steps] = await Promise.all([
-        result.text,
-        result.responseMessages,
-        result.content,
-        result.usage,
-        result.finishReason,
-        result.steps,
-      ])
+      let parts: [string, unknown, ReadonlyArray<any>, LanguageModelUsage, string, ReadonlyArray<unknown>]
+      try {
+        parts = (await Promise.all([
+          result.text,
+          result.responseMessages,
+          result.content,
+          result.usage,
+          result.finishReason,
+          result.steps,
+        ])) as typeof parts
+      } catch (err) {
+        await inContext(p.ghuri, () => this.recordRun(p, undefined, err))
+        throw err
+      }
+      const [text, responseMessages, content, usage, finishReason, steps] = parts
       return inContext(p.ghuri, () =>
         this.finish(p, {
           text,

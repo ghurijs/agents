@@ -1,7 +1,7 @@
 import { apps, type RequestUser } from '@ghuri/core'
 import type { ModelMessage } from 'ai'
 import { ToolError } from './errors'
-import { Conversation, Message } from './models'
+import { type Conversation, getConversationModel, Message } from './models'
 
 /** The conversation does not exist, belongs to another agent, or is not owned by the user. */
 export class ConversationNotFound extends ToolError {
@@ -32,7 +32,10 @@ export function isOwner(conversation: Conversation, user: RequestUser | null | u
   return String(owner) === String(pk)
 }
 
-/** A user's conversation with `agent`, or `ConversationNotFound`. */
+/**
+ * A user's conversation with `agent`, or `ConversationNotFound`. Reads `AGENTS.CONVERSATION_MODEL`, so a
+ * tenant-scoped conversation model only finds the current tenant's conversations.
+ */
 export async function getConversation(
   agent: string,
   id: string,
@@ -40,7 +43,9 @@ export async function getConversation(
 ): Promise<Conversation> {
   let conv: Conversation | null = null
   try {
-    conv = await Conversation.objects.filter({ id: String(id), agent }).first()
+    conv = (await getConversationModel()
+      .objects.filter({ id: String(id), agent })
+      .first()) as Conversation | null
   } catch {
     conv = null
   }
@@ -55,12 +60,12 @@ export async function createConversation(
   opts: { title?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<Conversation> {
   const pk = ownerPk(user)
-  return Conversation.objects.create({
+  return getConversationModel().objects.create({
     agent,
     title: (opts.title ?? '').slice(0, 200),
     metadata: opts.metadata ?? {},
     ...(pk !== null ? { userId: pk } : {}),
-  } as any)
+  } as any) as Promise<Conversation>
 }
 
 /** The stored messages of a conversation, as AI SDK model messages (oldest first). */
