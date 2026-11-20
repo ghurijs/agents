@@ -5,6 +5,8 @@
 import { generateText, type LanguageModel, type LanguageModelUsage } from 'ai'
 import type { Agent, AgentRunResult, RunOptions, ToolCallRecord } from '../agent'
 import { resolveModel } from '../providers'
+import { describeTool } from '../tools/shaping'
+import type { AgentTool, JSONSchema } from '../tools/types'
 import { modelLabel } from '../trace'
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -507,4 +509,68 @@ export function formatEvalReport(report: EvalReport, opts: { failures?: boolean 
     }
   }
   return out.join('\n')
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Tool report
+
+export interface ToolReportRow {
+  name: string
+  /** Characters of the description as models see it (examples included). */
+  descriptionChars: number
+  /** Characters of the input schema (JSON). */
+  schemaChars: number
+  /** Rough token count of what the tool adds to every request (characters / 4). */
+  approxTokens: number
+  /** Arguments without a `description`: models guess what they mean. */
+  undocumented: string[]
+}
+
+function undocumentedArgs(schema: JSONSchema): string[] {
+  const props = (schema.properties ?? {}) as Record<string, JSONSchema>
+  return Object.entries(props)
+    .filter(([, p]) => !p || typeof p.description !== 'string' || !p.description.trim())
+    .map(([k]) => k)
+}
+
+/**
+ * What an agent's tools cost and where they are vague: per tool, the size of its description and schema, a rough
+ * token count, and the arguments that have no description. Tool definitions go with every request, so this is
+ * the fixed price of each model call; see where to trim, or whether `toolSearch` pays off.
+ */
+export function toolReport(source: Agent | AgentTool[]): ToolReportRow[] {
+  const tools = Array.isArray(source) ? source : source.getTools()
+  return tools.map((t) => {
+    const descriptionChars = describeTool(t).length
+    const schemaChars = JSON.stringify(t.inputSchema).length
+    return {
+      name: t.name,
+      descriptionChars,
+      schemaChars,
+      approxTokens: Math.ceil((t.name.length + descriptionChars + schemaChars) / 4),
+      undocumented: undocumentedArgs(t.inputSchema),
+    }
+  })
+}
+
+/** `toolReport()` as a table, largest tools first, with the total. */
+export function formatToolReport(rows: ToolReportRow[]): string {
+  const sorted = [...rows].sort((a, b) => b.approxTokens - a.approxTokens)
+  const head = ['tool', '~tokens', 'desc', 'schema', 'undocumented arguments']
+  const body = sorted.map((r) => [
+    r.name,
+    String(r.approxTokens),
+    String(r.descriptionChars),
+    String(r.schemaChars),
+    r.undocumented.join(', ') || '-',
+  ])
+  const total = rows.reduce((s, r) => s + r.approxTokens, 0)
+  body.push(['total', String(total), '', '', `${rows.length} tools`])
+  const widths = head.map((h, i) => Math.max(h.length, ...body.map((r) => r[i].length)))
+  const line = (cells: string[]) =>
+    cells
+      .map((c, i) => (i === 0 || i === 4 ? c.padEnd(widths[i]) : c.padStart(widths[i])))
+      .join('  ')
+      .trimEnd()
+  return [line(head), line(widths.map((w) => '-'.repeat(w))), ...body.map(line)].join('\n')
 }

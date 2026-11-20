@@ -22,6 +22,7 @@ import {
   type ToolSet,
   type UIMessageChunk,
 } from 'ai'
+import { ToolInputError } from './errors'
 import {
   ConversationNotFound,
   createConversation,
@@ -36,6 +37,16 @@ import { resolveModel } from './providers'
 import { type EnqueueOptions, enqueueRun } from './queue'
 import { agentsSettings, DEFAULT_MAX_STEPS, defaultPermissionClasses } from './settings'
 import { inContext, toToolError } from './tools/execute'
+import {
+  FIND_TOOLS,
+  FIND_TOOLS_SCHEMA,
+  findToolsDescription,
+  loadedToolNames,
+  runFindTools,
+  type ToolSearchOptions,
+  toolSearchOptions,
+} from './tools/search'
+import { checkToolInput, describeTool } from './tools/shaping'
 import { collectDeclaredTools, isToolDecorator, standaloneTool, type ToolDecorator } from './tools/tool'
 import { type AgentTool, isAgentTool, isToolkit, type ToolContext, type Toolkit } from './tools/types'
 import { modelLabel, recordRun } from './trace'
@@ -118,7 +129,12 @@ interface Prepared {
   ghuri?: GhuriContext
   /** `Date.now()` when the run started (after permissions and model resolution). */
   startedAt: number
+  /** With `toolSearch`: tools always sent, and the tools `find_tools` can load. */
+  search?: { always: string[]; deferred: string[] }
 }
+
+const TOOL_SEARCH_NOTE =
+  'Not every tool is loaded yet. When you need a tool you do not have, call find_tools first, then use the tools it loads.'
 
 function deriveName(cls: Function): string {
   const base = cls.name.replace(/Agent$/, '') || cls.name || 'agent'
@@ -192,6 +208,18 @@ export class Agent {
   providerOptions?: Record<string, any>
   /** Use conversation memory when the `agents` app is installed (default true). */
   memory = true
+  /**
+   * Check tool arguments against each tool's schema before it runs: unknown arguments, missing required ones,
+   * values outside an enum and wrong types come back to the model as one clear error it can correct. Default
+   * `AGENTS.STRICT_TOOL_INPUT` (false).
+   */
+  strictToolInput?: boolean
+  /**
+   * Send the model only some tools (`alwaysLoaded`) plus `find_tools`, which loads the others it asks for. For agents
+   * with many tools: fewer schemas per request, and an easier choice for smaller models. `true` loads nothing up
+   * front. Off by default.
+   */
+  toolSearch?: boolean | ToolSearchOptions
   /** Set by `AgentRouter.register(name, …)`. */
   agentName?: string
 
@@ -271,13 +299,30 @@ export class Agent {
   /** AI SDK tool set for a run: validation, `onToolCall`, context and error normalization included. */
   buildToolSet(ctx: AgentRunContext, tools: AgentTool[] = this.getTools()): ToolSet {
     const ghuri = tryGetContext()
+    const strict = this.strictToolInput ?? agentsSettings().STRICT_TOOL_INPUT ?? false
+    const invalidInput = new WeakMap<object, string[]>()
     const set: ToolSet = {}
     for (const t of tools) {
       set[t.name] = aiTool({
-        description: t.description,
+        description: describeTool(t),
         inputSchema: jsonSchema(t.inputSchema as JSONSchema7, {
           validate: (value: unknown) => {
             try {
+              if (strict) {
+                const problems = checkToolInput(t.inputSchema, value)
+                // Reported from `execute`, so the model reads the plain message instead of the AI SDK's
+                // validation error wrapped around it. The raw arguments stay what the history records.
+                if (problems.length && value && typeof value === 'object') {
+                  invalidInput.set(value, problems)
+                  return { success: true, value }
+                }
+                if (problems.length) {
+                  throw new ToolInputError(
+                    `Invalid arguments for ${t.name}: ${problems.join('; ')}.`,
+                    problems,
+                  )
+                }
+              }
               return { success: true, value: t.parse ? t.parse(value) : value }
             } catch (error) {
               return { success: false, error: toToolError(error, t.name) }
@@ -295,6 +340,10 @@ export class Agent {
               request: ctx.request,
             }
             try {
+              const problems = input && typeof input === 'object' ? invalidInput.get(input) : undefined
+              if (problems) {
+                throw new ToolInputError(`Invalid arguments for ${t.name}: ${problems.join('; ')}.`, problems)
+              }
               await this.onToolCall?.({ toolName: t.name, toolCallId: opts.toolCallId, input }, ctx)
               return await t.execute(input, toolCtx)
             } catch (err) {
@@ -342,15 +391,60 @@ export class Agent {
       extra: opts.context ?? {},
     }
     await this.beforeRun?.(ctx)
-    const instructions = await this.getInstructions(ctx)
+    let instructions = await this.getInstructions(ctx)
+    const tools = this.getTools()
+    const set = this.buildToolSet(ctx, tools)
+    const searchOpts = toolSearchOptions(this.toolSearch)
+    let search: Prepared['search']
+    if (searchOpts) {
+      search = this.addToolSearch(set, tools, searchOpts)
+      instructions = instructions ? `${instructions}\n\n${TOOL_SEARCH_NOTE}` : TOOL_SEARCH_NOTE
+    }
     return {
       ctx,
       model,
       instructions,
-      tools: this.buildToolSet(ctx),
+      tools: set,
       ghuri: tryGetContext(),
       startedAt: Date.now(),
+      ...(search ? { search } : {}),
     }
+  }
+
+  /** Add `find_tools` to a tool set; returns which tools are always sent and which are loaded on demand. */
+  protected addToolSearch(
+    set: ToolSet,
+    tools: AgentTool[],
+    opts: ToolSearchOptions,
+  ): { always: string[]; deferred: string[] } {
+    if (set[FIND_TOOLS]) {
+      throw new ImproperlyConfigured(
+        `${this.constructor.name} has a tool named '${FIND_TOOLS}', which toolSearch needs for itself.`,
+      )
+    }
+    const always = opts.alwaysLoaded ?? []
+    const names = new Set(tools.map((t) => t.name))
+    for (const n of always) {
+      if (!names.has(n)) {
+        throw new ImproperlyConfigured(
+          `${this.constructor.name}.toolSearch.alwaysLoaded names unknown tool '${n}' (tools: ${[...names].join(', ')}).`,
+        )
+      }
+    }
+    const deferred = tools.filter((t) => !always.includes(t.name))
+    set[FIND_TOOLS] = aiTool({
+      description: findToolsDescription(deferred),
+      inputSchema: jsonSchema(FIND_TOOLS_SCHEMA as unknown as JSONSchema7),
+      execute: async (input: any) => runFindTools(deferred, input ?? {}, opts.maxResults ?? 5),
+    } as any)
+    return { always, deferred: deferred.map((t) => t.name) }
+  }
+
+  /** Tools sent for a step: the always-loaded ones, `find_tools`, and whatever earlier searches loaded. */
+  protected activeToolsFor(search: NonNullable<Prepared['search']>, messages: ModelMessage[]): string[] {
+    const deferred = new Set(search.deferred)
+    const loaded = [...loadedToolNames(messages)].filter((n) => deferred.has(n))
+    return [...new Set([...search.always, FIND_TOOLS, ...loaded])]
   }
 
   protected callSettings(p: Prepared): Record<string, unknown> {
@@ -364,6 +458,14 @@ export class Agent {
       ...(this.maxOutputTokens !== undefined ? { maxOutputTokens: this.maxOutputTokens } : {}),
       ...(this.providerOptions ? { providerOptions: this.providerOptions } : {}),
       ...(p.ctx.signal ? { abortSignal: p.ctx.signal } : {}),
+      ...(p.search
+        ? {
+            activeTools: this.activeToolsFor(p.search, p.ctx.messages),
+            prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
+              activeTools: this.activeToolsFor(p.search!, messages),
+            }),
+          }
+        : {}),
     }
   }
 

@@ -105,6 +105,15 @@ export { runTool, toToolError } from './tools/execute'
 export { type ModelToolAction, ModelTools, type ModelToolsOptions } from './tools/model'
 export { RouterTools, type RouterToolsOptions } from './tools/router'
 export { sanitizeToolName, toJSONSchema } from './tools/schema'
+export { FIND_TOOLS, searchTools, type ToolSearchOptions } from './tools/search'
+export {
+  checkToolInput,
+  compactValue,
+  describeTool,
+  type ResultFields,
+  type ResultShape,
+  shapeResult,
+} from './tools/shaping'
 export {
   collectDeclaredTools,
   defineTool,

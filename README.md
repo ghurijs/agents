@@ -470,6 +470,21 @@ console.log(formatEvalReport(await runEval(suite, { beforeEach: () => db.flush()
 
 Put suites in `*.eval.ts` files and run them with `npx ghuri eval [--models a,b] [--repeat n] [--report dir]`.
 
+### Shaping tools for smaller models
+
+All opt-in; measure each with an eval.
+
+```ts
+class StoreAgent extends Agent {
+  tools = [new ModelTools(Product, { resultFields: { list: ['id', 'title', 'price'] }, compact: true }), ...more]
+  toolSearch = { alwaysLoaded: ['products_list'] }   // other tools are loaded by the model with find_tools
+  strictToolInput = true                             // bad arguments come back as one clear, fixable error
+}
+```
+
+`examples: [{ ... }]` on `tool()` / `@tool` (or per action on `ModelTools`) shows example arguments after the
+description. `toolReport(agent)` from `@ghuri/agents/evals` shows what each tool costs per request.
+
 ## 11. Security model
 
 - **Tools act as the user, never as the server.** Generated tools force-authenticate the run's user and go

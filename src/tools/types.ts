@@ -44,6 +44,11 @@ export interface AgentTool {
    * server is not in OAuth mode and by agents.
    */
   scopes?: string[]
+  /**
+   * Example arguments, shown to models after the description (`Example input: {...}`, at most three). One or two
+   * realistic examples help smaller models fill in arguments correctly.
+   */
+  examples?: Array<Record<string, unknown>>
   /** Validate / coerce raw arguments; throws `ToolInputError`. Defaults to accepting any object. */
   parse?(input: unknown): unknown
   /** Run the tool. Throw `ToolError` for failures the model should see. */
