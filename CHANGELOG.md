@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.6
 
 - Usage limits: `AGENTS.USAGE_LIMITS` sets token budgets per UTC day and month for users, tenants (the carried
   `tenant`) and anonymous clients (per address), as numbers or as a function of the subject (the hook for billing
@@ -14,8 +14,6 @@
   remaining and reset time per scope and period. Signals `usageLimitReached` and `usageRecorded`. Also exported:
   `checkUsage`, `recordUsage`, `usageSubjects`, `usageLimitsFor`, `usageTokens`, `usageWindow`, `Agent.checkUsage()`.
 - `@ghuri/agents/admin` (optional peer `@ghuri/admin`): read-only `Usage` and `Run` admins.
-
-## 0.1.0-alpha.6
 
 - Background runs on `@ghuri/tasks`: when it is loaded, `agent.enqueue()` enqueues the `agents.run` task (3 attempts)
   on the `TASKS` backend and returns `{ conversationId, taskResult, taskResultId }`. `@ghuri/tasks` is not a
