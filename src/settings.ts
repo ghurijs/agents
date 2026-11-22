@@ -3,6 +3,7 @@ import type { AuthenticationClass, PermissionClass } from '@ghuri/rest'
 import { IsAuthenticated } from '@ghuri/rest'
 import type { LanguageModel } from 'ai'
 import type { ProviderContext } from './providers'
+import type { UsageLimitsSetting } from './usage'
 
 /** Credentials / options for one provider (`AGENTS.PROVIDERS.anthropic`). */
 export interface ProviderConfig {
@@ -60,6 +61,12 @@ export interface AgentsSettings {
    * the first `migrate`; `agents.Conversation` then gets no table.
    */
   CONVERSATION_MODEL?: string
+  /**
+   * Token budgets per UTC day / month, checked before every run and counted after it (table `agents_usage`):
+   * `{ user: { day: 200_000 }, tenant: (subject) => planLimits(subject.key), anon: { day: 20_000 } }`, or one function
+   * of the subject for every scope. Only the scopes named are counted. Off when unset.
+   */
+  USAGE_LIMITS?: UsageLimitsSetting
 }
 
 declare module '@ghuri/core' {

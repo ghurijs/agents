@@ -51,6 +51,7 @@ import { checkToolInput, describeTool } from './tools/shaping'
 import { collectDeclaredTools, isToolDecorator, standaloneTool, type ToolDecorator } from './tools/tool'
 import { type AgentTool, isAgentTool, isToolkit, type ToolContext, type Toolkit } from './tools/types'
 import { modelLabel, recordRun } from './trace'
+import { checkUsage, recordUsage, type UsageSubject } from './usage'
 
 /** What `agent.enqueue()` returns. */
 export interface EnqueueResult {
@@ -142,6 +143,8 @@ interface Prepared {
   startedAt: number
   /** With `toolSearch`: tools always sent, and the tools `find_tools` can load. */
   search?: { always: string[]; deferred: string[] }
+  /** Who the run's tokens count against (`AGENTS.USAGE_LIMITS`). */
+  usage: UsageSubject[]
 }
 
 const TOOL_SEARCH_NOTE =
@@ -295,6 +298,15 @@ export class Agent {
     return out
   }
 
+  /**
+   * Refuse a run of `user` that is over a token budget (`AGENTS.USAGE_LIMITS`): throws `UsageLimitExceeded`. Returns
+   * the subjects (user or anonymous client, tenant) the run counts against. Called by `run()`, `stream()` and
+   * `enqueue()`; nothing is checked or counted without the setting.
+   */
+  async checkUsage(user: RequestUser, request?: APIRequest): Promise<UsageSubject[]> {
+    return checkUsage(this, user, request ? { request } : {})
+  }
+
   /** Check `permissionClasses` for `user` (`NotAuthenticated` / `PermissionDenied` from `@ghuri/rest`). */
   async checkPermissions(user: RequestUser, request?: APIRequest): Promise<void> {
     const req: any = request ?? { user, auth: null, method: 'POST', successfulAuthenticator: null }
@@ -369,6 +381,8 @@ export class Agent {
   protected async prepare(input: AgentInput, opts: RunOptions): Promise<Prepared> {
     const user = opts.user ?? anonymousUser
     if (opts.checkPermissions) await this.checkPermissions(user, opts.request)
+    // Before the model and the conversation: a refused run leaves nothing behind.
+    const usage = await this.checkUsage(user, opts.request)
     const agentName = this.getName()
     // Resolve the model first: a missing provider / key / binding must not leave an empty conversation behind.
     const model = await resolveModel(this.model, undefined, { agent: agentName, user })
@@ -418,6 +432,7 @@ export class Agent {
       tools: set,
       ghuri: tryGetContext(),
       startedAt: Date.now(),
+      usage,
       ...(search ? { search } : {}),
     }
   }
@@ -491,6 +506,8 @@ export class Agent {
       steps: number
     },
   ): Promise<AgentRunResult> {
+    // Count the tokens first: they were spent even if saving or `afterRun` fails. Never throws.
+    await recordUsage(this, p.ctx.user, p.usage, r.usage)
     const messages = [...p.ctx.newMessages, ...r.responseMessages]
     if (p.ctx.conversation) await saveMessages(p.ctx.conversation, messages)
     const result: AgentRunResult = {
@@ -546,9 +563,13 @@ export class Agent {
    * Run in the background. With `@ghuri/tasks` this enqueues the `agents.run` task (retried up to 3 times) and
    * returns its `taskResult`; otherwise (or with `AGENTS.QUEUE_BINDING` / `AGENTS.ENQUEUE: 'queue'`) it sends a job to
    * a Cloudflare Queue that `AgentRouter.consumeQueue()` runs. The conversation is created up front; poll it.
+   * A user or tenant over its token budget gets `UsageLimitExceeded` and nothing is enqueued.
    */
   async enqueue(input: AgentInput, opts: EnqueueOptions = {}): Promise<EnqueueResult> {
-    if (enqueueMode(opts) === 'tasks') return enqueueAsTask(this, input, opts)
+    const mode = enqueueMode(opts)
+    // Refuse over-budget runs up front; the queued run is checked (and counted) again when it runs.
+    await this.checkUsage(opts.user ?? anonymousUser)
+    if (mode === 'tasks') return enqueueAsTask(this, input, opts)
     return enqueueRun(this, input, opts)
   }
 

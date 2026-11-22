@@ -15,13 +15,14 @@ import {
 } from '@ghuri/rest'
 import { APICallError } from 'ai'
 import type { Agent, AgentInput } from './agent'
-import { ModelResolutionError } from './errors'
+import { ModelResolutionError, UsageLimitExceeded } from './errors'
 import { McpServer, type McpServerOptions } from './mcp'
 import { ConversationNotFound, getConversation, memoryAvailable } from './memory'
 import { getConversationModel, Message } from './models'
 import { consumeAgentQueue } from './queue'
-import { agentsSettings } from './settings'
+import { agentsSettings, defaultPermissionClasses } from './settings'
 import { registerAgent } from './tasks'
+import { getUsage, usageWindowJSON } from './usage'
 
 export type AgentClass = new () => Agent
 
@@ -63,6 +64,7 @@ function retryAfterSeconds(headers: Record<string, string>): number | null {
  * deployment's problem, not the caller's. Anything else is returned unchanged.
  */
 export function modelCallError(err: unknown): unknown {
+  if (err instanceof UsageLimitExceeded) return usageThrottled(err)
   const f = providerFailure(err)
   if (!f) return err
   const debug = tryGetContext()?.settings.DEBUG
@@ -73,6 +75,14 @@ export function modelCallError(err: unknown): unknown {
     return new ModelUnavailable(debug && err instanceof Error ? err.message : undefined)
   }
   return err
+}
+
+/**
+ * `Throttled` (429, `Retry-After` until the window resets, code `usage_limit_exceeded`) for a run refused by
+ * `AGENTS.USAGE_LIMITS`.
+ */
+export function usageThrottled(err: UsageLimitExceeded): Throttled {
+  return new Throttled(err.wait, `Token usage limit reached for this ${err.period}.`, 'usage_limit_exceeded')
 }
 
 /** `AGENTS.AUTHENTICATION_CLASSES`, else `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`. */
@@ -230,6 +240,34 @@ export class ConversationDetailView extends AgentBaseView {
   }
 }
 
+/**
+ * `GET usage/` — the requesting user's token usage of the current UTC day and month, with limits
+ * (`AGENTS.USAGE_LIMITS`): `{ results: [{ scope, key, period, start, resetsAt, used, limit, remaining, … }] }`.
+ * Permissions: `AGENTS.PERMISSION_CLASSES` (default `IsAuthenticated`).
+ */
+export class UsageView extends APIView {
+  override rendererClasses = [JSONRenderer]
+
+  override getAuthenticators(): BaseAuthentication[] {
+    const classes = this.authenticationClasses ?? agentAuthenticationClasses()
+    return classes ? classes.map((A) => new A()) : super.getAuthenticators()
+  }
+
+  override getPermissions(): BasePermission[] {
+    if (this.permissionClasses) return super.getPermissions()
+    return defaultPermissionClasses().map((P) => new P())
+  }
+
+  override performContentNegotiation(request: APIRequest, _force = false): [any, string] {
+    return super.performContentNegotiation(request, true)
+  }
+
+  async get(request: APIRequest): Promise<APIResponse> {
+    const windows = await getUsage({ user: request.user, request })
+    return new APIResponse({ results: windows.map(usageWindowJSON) })
+  }
+}
+
 export interface AgentRouterOptions {
   /** URL name prefix (default `'agents'`: `agents-support-chat`). */
   urlNamePrefix?: string
@@ -243,6 +281,7 @@ export interface AgentRouterOptions {
  * agents.register('support', SupportAgent)
  * export const urlpatterns = [path('agents/', include(agents.urls)), path('mcp/', agents.mcp({ name: 'shop' }))]
  * // POST /agents/support/chat   GET /agents/support/conversations/   GET|DELETE /agents/support/conversations/<id>/
+ * // GET /agents/usage/ (token usage and limits of the requesting user)
  * ```
  */
 export class AgentRouter {
@@ -290,7 +329,7 @@ export class AgentRouter {
 
   getUrls(): UrlPatterns {
     const prefix = this.opts.urlNamePrefix ?? 'agents'
-    const out: UrlPatterns = []
+    const out: UrlPatterns = [path('usage/', UsageView.asView(), { name: `${prefix}-usage` })]
     for (const name of this.registry.keys()) {
       const init = { agentRouter: this, agentName: name }
       const chat = AgentChatView.asView(init)

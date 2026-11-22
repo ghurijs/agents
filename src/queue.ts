@@ -9,6 +9,7 @@ import {
 } from '@ghuri/core'
 import type { Agent, AgentInput } from './agent'
 import { captureCarried, restoreCarried } from './carry'
+import { UsageLimitExceeded } from './errors'
 import { createConversation, memoryAvailable, ownerPk, titleFrom } from './memory'
 import { agentsSettings } from './settings'
 
@@ -84,7 +85,7 @@ export async function loadJobUser(userId: unknown): Promise<RequestUser> {
 /**
  * Register a queue consumer running queued agent jobs with `create(name)` (an `AgentRouter`'s factory).
  * Each run happens inside the request context captured by `enqueue()` (the tenant, …). Messages that are not agent
- * jobs are left alone; failed runs are retried.
+ * jobs are left alone; failed runs are retried, runs refused by `AGENTS.USAGE_LIMITS` are acked and logged.
  */
 export function consumeAgentQueue(queue: string, create: (name: string) => Agent): () => void {
   return onQueue(queue, async (batch: MessageBatchLike<any>) => {
@@ -103,6 +104,12 @@ export function consumeAgentQueue(queue: string, create: (name: string) => Agent
         })
         msg.ack()
       } catch (err) {
+        if (err instanceof UsageLimitExceeded) {
+          // Retrying cannot help before the window resets (hours or weeks): drop the job, like a 429.
+          console.warn(`[ghuri.agents] queued run of '${job.agent}' refused: ${err.message}`)
+          msg.ack()
+          continue
+        }
         console.error(`[ghuri.agents] queued run of '${job.agent}' failed:`, err)
         msg.retry()
       }

@@ -15,6 +15,7 @@ import {
   createRegisteredAgent,
   enqueueMode,
   Message,
+  UsageLimitExceeded,
 } from '../src/index'
 import { makeUser, useHarness } from './helpers'
 import { scriptedModel } from './mock'
@@ -153,6 +154,33 @@ describe('agents on @ghuri/tasks', () => {
       expect(enqueueMode()).toBe('tasks')
     } finally {
       delete settings.AGENTS
+    }
+  })
+
+  it('AGENTS.USAGE_LIMITS: enqueue() refuses up front; a queued run over the limit fails its task', async () => {
+    const { getContext } = await import('@ghuri/core')
+    const settings = getContext().settings as any
+    const { backend, restore } = useTaskBackend(dummy({ queues: [] }))
+    try {
+      settings.AGENTS = { USAGE_LIMITS: { user: { day: 10 } } }
+      const alice = await makeUser('alice')
+      const first = await router.create('helper').enqueue('one', { user: alice })
+      const second = await router.create('helper').enqueue('two', { user: alice }) // nothing counted yet
+      await backend.runPending()
+      expect(first.taskResult!.status).toBe('SUCCESSFUL')
+      expect(second.taskResult!.status).toBe('FAILED')
+      expect((second.taskResult as any).errors.at(-1).exceptionClassPath).toMatch(/UsageLimitExceeded/)
+      expect(await messagesOf(second.conversationId)).toEqual([])
+
+      const conversations = await Conversation.objects.count()
+      await expect(router.create('helper').enqueue('three', { user: alice })).rejects.toBeInstanceOf(
+        UsageLimitExceeded,
+      )
+      expect(backend.results).toHaveLength(2)
+      expect(await Conversation.objects.count()).toBe(conversations)
+    } finally {
+      delete settings.AGENTS
+      restore()
     }
   })
 
