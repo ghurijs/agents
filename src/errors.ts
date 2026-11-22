@@ -1,4 +1,6 @@
 import { GhuriError } from '@ghuri/core'
+import type { UsagePeriod } from './models'
+import type { UsageSubject } from './usage'
 
 /** Base class of `@ghuri/agents` errors. */
 export class AgentError extends GhuriError {}
@@ -40,3 +42,52 @@ export class UnknownToolError extends AgentError {}
 
 /** A `'provider:model'` string could not be resolved. */
 export class ModelResolutionError extends AgentError {}
+
+/**
+ * A run was refused because a subject (the user, the tenant or the anonymous client) used its token budget for the
+ * period (`AGENTS.USAGE_LIMITS`). The chat view answers `429` with `Retry-After: wait`; MCP returns a tool error.
+ */
+export class UsageLimitExceeded extends AgentError {
+  /** Who is over the limit. */
+  readonly subject: UsageSubject
+  readonly period: UsagePeriod
+  /** The limit in tokens. */
+  readonly limit: number
+  /** Tokens used in the window so far. */
+  readonly used: number
+  /** When the window ends (UTC). */
+  readonly resetsAt: Date
+  /** Seconds until `resetsAt`. */
+  readonly wait: number
+
+  constructor(opts: {
+    subject: UsageSubject
+    period: UsagePeriod
+    limit: number
+    used: number
+    resetsAt: Date
+    wait: number
+  }) {
+    super(
+      `Token usage limit reached for ${opts.subject.scope} ${opts.subject.key}: ${opts.used} of ${opts.limit} tokens this ${opts.period}. Resets at ${opts.resetsAt.toISOString()}.`,
+    )
+    this.subject = opts.subject
+    this.period = opts.period
+    this.limit = opts.limit
+    this.used = opts.used
+    this.resetsAt = opts.resetsAt
+    this.wait = opts.wait
+  }
+
+  toJSON(): Record<string, unknown> {
+    return {
+      error: this.message,
+      scope: this.subject.scope,
+      period: this.period,
+      limit: this.limit,
+      used: this.used,
+      resetsAt: this.resetsAt.toISOString(),
+      retryAfter: this.wait,
+    }
+  }
+}

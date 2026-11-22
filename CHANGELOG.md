@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Usage limits: `AGENTS.USAGE_LIMITS` sets token budgets per UTC day and month for users, tenants (the carried
+  `tenant`) and anonymous clients (per address), as numbers or as a function of the subject (the hook for billing
+  plans). Every run is checked before it starts (`run()`, `stream()`, the chat view, MCP `ask_<agent>`,
+  `enqueue()` on both paths, and the queued run) and counted after it ends in the new `agents.Usage` table
+  (migration `0003_usage`, database-side increments). Over the limit: `UsageLimitExceeded` from code, `429` with
+  `Retry-After` from the chat view (`usageThrottled()`, code `usage_limit_exceeded`), an `isError` result over MCP;
+  the queue consumer acks refused jobs instead of retrying them. Soft limit: concurrent runs pass the same check.
+  Nothing is counted without the setting.
+- `getUsage({ user, tenant?, request? })` and `GET <agents>/usage/` (`UsageView`, name `agents-usage`): used, limit,
+  remaining and reset time per scope and period. Signals `usageLimitReached` and `usageRecorded`. Also exported:
+  `checkUsage`, `recordUsage`, `usageSubjects`, `usageLimitsFor`, `usageTokens`, `usageWindow`, `Agent.checkUsage()`.
+- `@ghuri/agents/admin` (optional peer `@ghuri/admin`): read-only `Usage` and `Run` admins.
+
 ## 0.1.0-alpha.6
 
 - Background runs on `@ghuri/tasks`: when it is loaded, `agent.enqueue()` enqueues the `agents.run` task (3 attempts)

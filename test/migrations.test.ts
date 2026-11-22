@@ -11,6 +11,7 @@ import {
   getConversationModel,
   Message,
   Run,
+  Usage,
 } from '../src/index'
 import { makeUser, useHarness } from './helpers'
 
@@ -39,6 +40,14 @@ describe('agents migrations', () => {
     expect(m.operations.map((o) => o.describe())).toEqual(['Create model Run'])
   })
 
+  it('ships 0003_usage with the Usage counter table, after 0002', async () => {
+    const loader = await MigrationLoader.load({ connection: null })
+    const m = loader.getMigration('agents', '0003_usage')
+    expect([...(loader.graph.parents.get('agents.0003_usage') ?? [])]).toEqual(['agents.0002_run'])
+    expect(m.operations.map((o) => o.describe())).toEqual(['Create model Usage'])
+    expect(Usage._meta.uniqueTogether).toEqual([['scope', 'key', 'period', 'start']])
+  })
+
   it('has no changes missing from the migrations', async () => {
     const res = await makeMigrations({ appLabels: ['agents'], check: true, write: false })
     expect(res.migrations.map((g) => g.migration.operations.map((o) => o.describe()))).toEqual([])
@@ -49,6 +58,7 @@ describe('agents migrations', () => {
     expect(status.map((s) => [s.app, s.name, s.applied])).toEqual([
       ['agents', '0001_initial', true],
       ['agents', '0002_run', true],
+      ['agents', '0003_usage', true],
     ])
     const user = await makeUser('migrated')
     const conv = await Conversation.objects.create({ agent: 'support', user } as any)

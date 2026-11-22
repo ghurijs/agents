@@ -32,6 +32,10 @@
     "./evals": {
       "types": "./dist/evals/index.d.ts",
       "import": "./dist/evals/index.js"
+    },
+    "./admin": {
+      "types": "./dist/admin.d.ts",
+      "import": "./dist/admin.js"
     }
   },
   "main": "./dist/index.js",
@@ -56,6 +60,7 @@
   "peerDependencies": {
     "@ai-sdk/anthropic": "^4.0.0",
     "@ai-sdk/openai": "^4.0.0",
+    "@ghuri/admin": "^0.1.0-alpha.0",
     "@ghuri/core": "^0.1.0-alpha.0",
     "@ghuri/orm": "^0.1.0-alpha.5",
     "@ghuri/rest": "^0.1.0-alpha.0",
@@ -68,6 +73,7 @@
     "@ai-sdk/openai": "^4.0.0",
     "@biomejs/biome": "^2.6.6",
     "@electric-sql/pglite": "^0.5.16",
+    "@ghuri/admin": "^0.1.0-alpha.0",
     "@ghuri/auth": "^0.1.0-alpha.0",
     "@ghuri/core": "^0.1.0-alpha.4",
     "@ghuri/oauth": "^0.1.0-alpha.0",
@@ -101,6 +107,9 @@
       "optional": true
     },
     "@ai-sdk/openai": {
+      "optional": true
+    },
+    "@ghuri/admin": {
       "optional": true
     }
   }

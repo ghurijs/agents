@@ -1,6 +1,6 @@
 import { type GhuriContext, HttpError, runWithContext, tryGetContext, ValidationError } from '@ghuri/core'
 import { APIException } from '@ghuri/rest'
-import { ToolError } from '../errors'
+import { ToolError, UsageLimitExceeded } from '../errors'
 import type { AgentTool, ToolContext } from './types'
 
 /** Run `fn` inside `ctx` (tools may run from stream callbacks outside the request's async context). */
@@ -20,6 +20,11 @@ function isDebug(): boolean {
  */
 export function toToolError(err: unknown, toolName?: string): ToolError {
   if (err instanceof ToolError) return err
+  // An agent tool (`ask_<agent>`, or an agent calling another) refused by AGENTS.USAGE_LIMITS.
+  if (err instanceof UsageLimitExceeded) {
+    const { error: _message, ...detail } = err.toJSON()
+    return new ToolError(err.message, { status: 429, detail, cause: err })
+  }
   if (err instanceof APIException) {
     return new ToolError(`${err.message || 'Request failed.'} (HTTP ${err.statusCode})`, {
       status: err.statusCode,

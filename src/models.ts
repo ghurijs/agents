@@ -1,6 +1,7 @@
 import {
   CASCADE,
   CharField,
+  DateField,
   DateTimeField,
   ForeignKey,
   getSwappableModel,
@@ -8,6 +9,7 @@ import {
   type Manager,
   Model,
   type ModelClass,
+  PositiveBigIntegerField,
   PositiveIntegerField,
   SET_NULL,
   TextField,
@@ -167,5 +169,47 @@ export class Run extends Model({
 
   toString(): string {
     return `${this.agent} ${this.status} (${String(this.id)})`
+  }
+}
+
+/** `Usage.scope` values: who a run counts against. */
+export const USAGE_SCOPES = ['user', 'tenant', 'anon'] as const
+export type UsageScope = (typeof USAGE_SCOPES)[number]
+
+/** `Usage.period` values: the windows tokens are counted in (UTC). */
+export const USAGE_PERIODS = ['day', 'month'] as const
+export type UsagePeriod = (typeof USAGE_PERIODS)[number]
+
+/**
+ * Token usage of one subject (a user, a tenant or an anonymous client) in one window (a UTC day or month), table
+ * `agents_usage`. Written after every run while `AGENTS.USAGE_LIMITS` is set and read before every run to enforce
+ * the limits; `getUsage()` reports it.
+ */
+export class Usage extends Model({
+  scope: new CharField({ maxLength: 10, choices: USAGE_SCOPES.map((s) => [s, s] as [string, string]) }),
+  /** The user pk, the tenant pk or the anonymous client's address (`'*'`: anonymous runs without a request). */
+  key: new CharField({ maxLength: 100 }),
+  period: new CharField({ maxLength: 10, choices: USAGE_PERIODS.map((p) => [p, p] as [string, string]) }),
+  /** First day of the window (UTC): the day itself, or the first of the month. */
+  start: new DateField(),
+  inputTokens: new PositiveBigIntegerField({ default: 0 }),
+  outputTokens: new PositiveBigIntegerField({ default: 0 }),
+  cachedInputTokens: new PositiveBigIntegerField({ default: 0 }),
+  /** What limits are compared to: the runs' total tokens (input + output). */
+  totalTokens: new PositiveBigIntegerField({ default: 0 }),
+  runs: new PositiveIntegerField({ default: 0 }),
+  updatedAt: new DateTimeField({ autoNow: true }),
+}) {
+  declare static objects: Manager<Usage>
+  static Meta = {
+    appLabel: 'agents',
+    ordering: ['-start', 'scope', 'key'],
+    verboseName: 'usage',
+    verboseNamePlural: 'usage',
+    uniqueTogether: [['scope', 'key', 'period', 'start']],
+  }
+
+  toString(): string {
+    return `${this.scope} ${this.key} ${this.period} ${this.start}`
   }
 }

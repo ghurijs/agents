@@ -26,7 +26,7 @@ npm install @ai-sdk/openai          # 'openai:…'
 7. [Conversation memory](#7-conversation-memory)
 8. [HTTP endpoints and streaming to a frontend](#8-http-endpoints-and-streaming-to-a-frontend)
 9. [MCP server (Claude Desktop / Claude Code)](#9-mcp-server)
-10. [Background runs (Queues)](#10-background-runs)
+10. [Background runs, traces, usage limits, evals](#10-background-runs)
 11. [Security model](#11-security-model)
 12. [Settings](#12-settings)
 13. [Testing your agents](#13-testing-your-agents)
@@ -462,6 +462,30 @@ tenant that enqueued it.
 `Run` (table `agents_run`, migration `0002_run`): model, conversation, user, status, steps, tokens, tool calls,
 carried context, error and duration. `{ messages: true }` also stores the messages (prompts and answers).
 
+### Usage limits
+
+Token budgets per user, tenant and anonymous client, per UTC day and month, so one heavy user can't run up the
+model bill. Set `AGENTS.USAGE_LIMITS` and run `ghuri migrate` (table `agents_usage`, migration `0003_usage`):
+
+```ts
+AGENTS: {
+  USAGE_LIMITS: {
+    user: { day: 200_000, month: 2_000_000 },        // input + output tokens
+    tenant: (subject) => planLimits(subject.key),    // a function: plans, staff exemptions (null: no limit)
+    anon: { day: 20_000 },                           // per client address
+  },
+}
+```
+
+Every run is checked before it starts (`run()`, `stream()`, the chat view, MCP `ask_<agent>`, `enqueue()` and the
+queued run itself) and counted when it ends. Over the limit, `run()` / `enqueue()` throw `UsageLimitExceeded`
+(`period`, `limit`, `used`, `resetsAt`, `wait`), the chat view answers `429` with `Retry-After` until the window
+resets, and MCP returns an `isError` result. The tenant is the carried one (`@ghuri/tenants`); only the scopes
+you name are counted. `getUsage({ user })` and `GET /agents/usage/` report `{ used, limit, remaining, resetsAt }`
+per scope and period; `usageLimitReached` and `usageRecorded` are signals; `import '@ghuri/agents/admin'` shows
+`Usage` and `Run` in the admin. Limits are soft: runs that start together pass the same check, and the run that
+crosses the limit is finished.
+
 ### Evals
 
 `@ghuri/agents/evals` runs real tasks against one or more models and grades each run, to compare a cheap model
@@ -531,6 +555,7 @@ AGENTS: {
   TASK: { backend: 'default', queueName: 'default' },      // 'tasks' mode: where agents.run goes
   QUEUE_BINDING: 'AGENTS_QUEUE',                           // 'queue' mode producer binding (selects 'queue')
   TRACE_RUNS: false,                                       // true / { messages: true }: save a Run per run
+  USAGE_LIMITS: { user: { day: 200_000 } },                // token budgets (user / tenant / anon); off by default
 }
 ```
 
