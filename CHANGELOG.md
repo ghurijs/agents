@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.6
 
 - Background runs on `@ghuri/tasks`: when it is loaded, `agent.enqueue()` enqueues the `agents.run` task (3 attempts)
   on the `TASKS` backend and returns `{ conversationId, taskResult, taskResultId }`. `@ghuri/tasks` is not a
