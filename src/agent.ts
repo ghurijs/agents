@@ -36,6 +36,7 @@ import type { Conversation } from './models'
 import { resolveModel } from './providers'
 import { type EnqueueOptions, enqueueRun } from './queue'
 import { agentsSettings, DEFAULT_MAX_STEPS, defaultPermissionClasses } from './settings'
+import { type AgentTaskResult, enqueueAsTask, enqueueMode } from './tasks'
 import { inContext, toToolError } from './tools/execute'
 import {
   FIND_TOOLS,
@@ -50,6 +51,16 @@ import { checkToolInput, describeTool } from './tools/shaping'
 import { collectDeclaredTools, isToolDecorator, standaloneTool, type ToolDecorator } from './tools/tool'
 import { type AgentTool, isAgentTool, isToolkit, type ToolContext, type Toolkit } from './tools/types'
 import { modelLabel, recordRun } from './trace'
+
+/** What `agent.enqueue()` returns. */
+export interface EnqueueResult {
+  /** The conversation the run writes to (when memory is available). */
+  conversationId?: string
+  /** `'tasks'` mode: the `agents.run` task's result (`refresh()` it, read `returnValue`). */
+  taskResult?: AgentTaskResult
+  /** `'tasks'` mode: the task result id, for `getResult()` later. */
+  taskResultId?: string
+}
 
 /** What can go in an agent's `tools`: toolkits, standalone `tool({...execute})`s and `AgentTool`s. */
 export type ToolEntry = Toolkit | ToolDecorator | AgentTool
@@ -532,10 +543,12 @@ export class Agent {
   }
 
   /**
-   * Run in the background through a Cloudflare Queue (`AGENTS.QUEUE_BINDING`); a consumer registered with
-   * `AgentRouter.consumeQueue()` performs the run. Returns the conversation id to poll.
+   * Run in the background. With `@ghuri/tasks` this enqueues the `agents.run` task (retried up to 3 times) and
+   * returns its `taskResult`; otherwise (or with `AGENTS.QUEUE_BINDING` / `AGENTS.ENQUEUE: 'queue'`) it sends a job to
+   * a Cloudflare Queue that `AgentRouter.consumeQueue()` runs. The conversation is created up front; poll it.
    */
-  async enqueue(input: AgentInput, opts: EnqueueOptions = {}): Promise<{ conversationId?: string }> {
+  async enqueue(input: AgentInput, opts: EnqueueOptions = {}): Promise<EnqueueResult> {
+    if (enqueueMode(opts) === 'tasks') return enqueueAsTask(this, input, opts)
     return enqueueRun(this, input, opts)
   }
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Background runs on `@ghuri/tasks`: when it is loaded, `agent.enqueue()` enqueues the `agents.run` task (3 attempts)
+  on the `TASKS` backend and returns `{ conversationId, taskResult, taskResultId }`. `@ghuri/tasks` is not a
+  dependency: agents find it through its `globalThis` interop object, so Workers bundles are unaffected.
+- `AGENTS.ENQUEUE` (`'tasks'` or `'queue'`) and `AGENTS.TASK` (`backend`, `queueName`, `priority`). Setting
+  `AGENTS.QUEUE_BINDING` keeps the Cloudflare Queue path, which also stays the default without `@ghuri/tasks`.
+- `registerAgent(name, AgentClass)` / `createRegisteredAgent(name)`: agents runnable by name from tasks;
+  `AgentRouter.register()` registers them. Also exported: `runAgentJob`, `agentRunTask`, `enqueueMode`,
+  `enqueueAsTask`, `AGENT_TASK_NAME`, `EnqueueResult`.
+
 ## 0.1.0-alpha.5
 
 Tool shaping, to help smaller models use many tools well. Everything is opt-in; agents that set nothing behave

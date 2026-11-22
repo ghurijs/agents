@@ -74,6 +74,7 @@
     "@ghuri/oauth-provider": "^0.1.0-alpha.0",
     "@ghuri/orm": "^0.1.0-alpha.5",
     "@ghuri/rest": "^0.1.0-alpha.0",
+    "@ghuri/tasks": "^0.1.0-alpha.0",
     "@types/node": "^24.0.0",
     "ai": "^7.0.0",
     "better-sqlite3": "^13.1.1",
