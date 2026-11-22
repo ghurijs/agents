@@ -33,8 +33,19 @@ export interface AgentsSettings {
   AUTHENTICATION_CLASSES?: AuthenticationClass[]
   /** Permission classes for agents that don't set `permissionClasses` (default `[IsAuthenticated]`). */
   PERMISSION_CLASSES?: PermissionClass[]
-  /** Queue producer binding used by `agent.enqueue()` (default `'AGENTS_QUEUE'`). */
+  /**
+   * Queue producer binding used by `agent.enqueue()` in `'queue'` mode (default `'AGENTS_QUEUE'`). Setting it
+   * selects `'queue'` mode unless `ENQUEUE` says otherwise.
+   */
   QUEUE_BINDING?: string
+  /**
+   * How `agent.enqueue()` runs agents in the background: `'tasks'` (the `agents.run` task of `@ghuri/tasks`) or
+   * `'queue'` (a Cloudflare Queue job for `AgentRouter.consumeQueue()`). Default: `'tasks'` when `@ghuri/tasks` is
+   * loaded and `QUEUE_BINDING` is not set, else `'queue'`.
+   */
+  ENQUEUE?: 'tasks' | 'queue'
+  /** Options for the `agents.run` task in `'tasks'` mode: the `TASKS` backend alias, queue name and priority. */
+  TASK?: { backend?: string; queueName?: string; priority?: number }
   /**
    * Save one `Run` row (table `agents_run`) per agent run: model, token usage, tool calls, outcome and timing.
    * Off by default; needs the agents app and its migrations. `{ messages: true }` also stores the run's messages

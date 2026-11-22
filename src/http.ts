@@ -21,6 +21,7 @@ import { ConversationNotFound, getConversation, memoryAvailable } from './memory
 import { getConversationModel, Message } from './models'
 import { consumeAgentQueue } from './queue'
 import { agentsSettings } from './settings'
+import { registerAgent } from './tasks'
 
 export type AgentClass = new () => Agent
 
@@ -260,6 +261,7 @@ export class AgentRouter {
     if (this.registry.has(name))
       throw new ImproperlyConfigured(`An agent named '${name}' is already registered.`)
     this.registry.set(name, agentClass)
+    registerAgent(name, agentClass)
     this._urls = undefined
     return this
   }

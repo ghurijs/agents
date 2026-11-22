@@ -7,6 +7,7 @@ export {
   type AgentRunContext,
   type AgentRunResult,
   AgentStream,
+  type EnqueueResult,
   type RunOptions,
   type ToolCallInfo,
   type ToolCallRecord,
@@ -101,6 +102,19 @@ export {
   loadJobUser,
 } from './queue'
 export { type AgentsSettings, agentsSettings, type ProviderConfig } from './settings'
+export {
+  AGENT_TASK_MAX_ATTEMPTS,
+  AGENT_TASK_NAME,
+  type AgentTaskJob,
+  type AgentTaskResult,
+  type AgentTaskReturn,
+  agentRunTask,
+  createRegisteredAgent,
+  enqueueAsTask,
+  enqueueMode,
+  registerAgent,
+  runAgentJob,
+} from './tasks'
 export { runTool, toToolError } from './tools/execute'
 export { type ModelToolAction, ModelTools, type ModelToolsOptions } from './tools/model'
 export { RouterTools, type RouterToolsOptions } from './tools/router'

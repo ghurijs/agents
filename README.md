@@ -428,17 +428,32 @@ Mount the endpoint with a trailing slash and use that exact URL (`APPEND_SLASH` 
 
 ## 10. Background runs
 
+With [`@ghuri/tasks`](https://github.com/ghurijs/tasks) installed, `enqueue()` enqueues the `agents.run` task on
+your `TASKS` backend (Cloudflare Queues, the database with `ghuri db_worker`, or in-process):
+
+```ts
+const { conversationId, taskResult } = await agents.create('support').enqueue('Summarize my week', { user })
+await taskResult.refresh()                 // later: READY, RUNNING, SUCCESSFUL or FAILED
+taskResult.returnValue                     // { conversationId, text, finishReason } once SUCCESSFUL
+```
+
+The task reloads the user (`AUTH_USER_MODEL`), runs the agent and stores the result in the conversation (created
+up front so you can poll `GET …/conversations/<id>/`). A failing run is tried 3 times; messages are saved only
+when a run finishes, so retries do not duplicate them. Agents are found by the name they were registered with on
+an `AgentRouter` (or `registerAgent(name, AgentClass)`). `AGENTS.TASK` sets the task's `backend`, `queueName` and
+`priority`.
+
+Without `@ghuri/tasks` (or with `AGENTS.QUEUE_BINDING` set, or `AGENTS.ENQUEUE: 'queue'`), `enqueue()` sends a job
+to a Cloudflare Queue instead, run by a consumer you register:
+
 ```ts
 // wrangler.jsonc: "queues": { "producers": [{ "binding": "AGENTS_QUEUE", "queue": "agents" }],
 //                            "consumers": [{ "queue": "agents" }] }
 agents.consumeQueue('agents')                                   // once, e.g. in an AppConfig.ready()
-const { conversationId } = await agents.create('support').enqueue('Summarize my week', { user })
 ```
 
-The consumer reloads the user (`AUTH_USER_MODEL`), runs the agent and stores the result in the conversation
-(created up front so you can poll `GET …/conversations/<id>/`). Failed runs are retried by the queue. The job
-carries the request context (`captureContext()`), so with `@ghuri/tenants` the run happens as the tenant that
-enqueued it.
+Either way the run carries the request context (`captureContext()`), so with `@ghuri/tenants` it happens as the
+tenant that enqueued it.
 
 ### Run traces
 
@@ -512,7 +527,9 @@ AGENTS: {
   MAX_STEPS: 10,                                           // default tool-loop steps
   AUTHENTICATION_CLASSES: [TokenAuthentication, SessionAuthentication],   // default: REST defaults
   PERMISSION_CLASSES: [IsAuthenticated],                   // default for agents / MCP
-  QUEUE_BINDING: 'AGENTS_QUEUE',                           // enqueue() producer binding
+  ENQUEUE: 'tasks',                                        // or 'queue'; default: 'tasks' with @ghuri/tasks
+  TASK: { backend: 'default', queueName: 'default' },      // 'tasks' mode: where agents.run goes
+  QUEUE_BINDING: 'AGENTS_QUEUE',                           // 'queue' mode producer binding (selects 'queue')
   TRACE_RUNS: false,                                       // true / { messages: true }: save a Run per run
 }
 ```
